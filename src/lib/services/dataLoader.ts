@@ -436,45 +436,6 @@ function createInternalStore() {
             }
 
             return null;
-        },
-
-        // Get a string representation of a type
-        getTypeDisplay: (typeInfo: any): string => {
-            if (!typeInfo) return 'unknown';
-
-            // Handle different types of type information
-            if (typeof typeInfo.type === 'string') {
-                // It's a primitive type
-                if (typeInfo.isArray) return `${typeInfo.type}[]`;
-                if (typeInfo.isMap && typeInfo.subTypes && typeInfo.subTypes.length >= 2)
-                    return `Map<${typeInfo.subTypes[0]}, ${typeInfo.subTypes[1]}>`;
-                if (typeInfo.isSet && typeInfo.subTypes && typeInfo.subTypes.length >= 1)
-                    return `Set<${typeInfo.subTypes[0]}>`;
-                if (typeInfo.isUnion && typeInfo.subTypes) return typeInfo.subTypes.join(' | ');
-
-                return typeInfo.type;
-            } else if (typeof typeInfo.type === 'number') {
-                // It's a reference to another entity
-                const { database } = get();
-                const referencedEntity = database.entityMap.get(typeInfo.type);
-                if (referencedEntity) {
-                    if (typeInfo.isArray) return `${referencedEntity.name}[]`;
-                    if (typeInfo.isMap && typeInfo.subTypes && typeInfo.subTypes.length >= 2) {
-                        const keyType =
-                            typeof typeInfo.subTypes[0] === 'number'
-                                ? database.entityMap.get(typeInfo.subTypes[0])?.name || 'unknown'
-                                : typeInfo.subTypes[0];
-                        const valueType =
-                            typeof typeInfo.subTypes[1] === 'number'
-                                ? database.entityMap.get(typeInfo.subTypes[1])?.name || 'unknown'
-                                : typeInfo.subTypes[1];
-                        return `Map<${keyType}, ${valueType}>`;
-                    }
-                    return referencedEntity.name;
-                }
-            }
-
-            return 'unknown';
         }
     };
 }
