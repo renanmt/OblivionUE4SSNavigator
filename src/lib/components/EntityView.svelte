@@ -173,11 +173,7 @@
         return `// Source file content not available`;
       }
       
-      // FileContent is already an array of lines, no need to split
-      const startLine = Math.max(0, entity.lineStart - 1); // Convert to 0-based index
-      const endLine = Math.min(fileContent.length, entity.lineEnd);
-      
-      return fileContent.slice(startLine, endLine).join('\n');
+      return fileContent.slice(entity.lineStart, entity.lineEnd + 1).join('\n');
     } catch (error) {
       console.error("Error getting entity source code:", error);
       return `// Error retrieving source code: ${error}`;

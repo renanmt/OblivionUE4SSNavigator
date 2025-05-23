@@ -1,7 +1,12 @@
-import * as fs from 'fs';
-import * as path from 'path';
-
-import type { Entity, Property, Method, Parameter, TypeInfo } from '$lib/types';
+import {
+    type Entity,
+    type Property,
+    type Method,
+    type Parameter,
+    type TypeInfo,
+    EntityType,
+    EntityReferenceType
+} from '$lib/types';
 
 const primitiveTypes = new Set<string>([
     // Basic C++ types
@@ -77,9 +82,11 @@ export interface TypeDatabase {
 
 export class TypeExtractor {
     private entities: Entity[] = [];
+    private entityMap: Map<string, Entity> = new Map();
     private classes: Map<string, Entity> = new Map();
     private properties: Property[] = [];
-    private functions: Method[] = [];
+    private methods: Method[] = [];
+    private parameters: Parameter[] = [];
     private enums: Map<string, Entity> = new Map();
     private aliases: Map<string, Entity> = new Map();
     private globalFunctions: Map<string, Entity> = new Map();
@@ -88,127 +95,6 @@ export class TypeExtractor {
     private numGlobalFunctionReturns: number = 0;
     private numFunctionParams: number = 0;
     private numFunctionReturns: number = 0;
-
-    /**
-     * Find or create an entity in the appropriate collection
-     */
-    private findOrCreateEntity(
-        name: string,
-        type: 'Class' | 'Enum' | 'Alias' | 'GlobalFunction' | 'Unknown' = 'Unknown',
-        fileIndex: number,
-        lineNumber: number
-    ): Entity {
-        // First check if entity already exists in any collection
-        let entity = this.classes.get(name) || this.enums.get(name) || this.aliases.get(name);
-
-        if (!entity) {
-            // Create new entity
-            entity = this.createEntity(name, type, fileIndex, lineNumber);
-            this.entities.push(entity);
-
-            // Add to appropriate collection
-            switch (type) {
-                case 'Class':
-                    this.classes.set(name, entity);
-                    break;
-                case 'Enum':
-                    this.enums.set(name, entity);
-                    break;
-                case 'Alias':
-                    this.aliases.set(name, entity);
-                    break;
-                case 'GlobalFunction':
-                    this.globalFunctions.set(name, entity);
-                    break;
-                default:
-                    // Unknown entities go to classes by default
-                    this.classes.set(name, entity);
-            }
-        }
-
-        return entity;
-    }
-
-    /**
-     * Process subtypes for complex types
-     */
-    private processSubTypes(
-        subTypes: string[] | null,
-        typeStr: string,
-        fileIndex: number,
-        lineNumber: number
-    ): (string | number)[] | null {
-        if (!subTypes) {
-            console.warn(`Warning: ${typeStr} is marked as a complex type but has no subtypes`);
-            return null;
-        }
-
-        const finalSubTypes: (string | number)[] = [];
-
-        for (const subType of subTypes) {
-            // If it's a primitive type, store as string
-            if (primitiveTypes.has(subType)) {
-                finalSubTypes.push(subType);
-                continue;
-            }
-
-            // Otherwise look up or create an entity and store its ID
-            const subTypeEntity = this.findOrCreateEntity(subType, 'Unknown', fileIndex, lineNumber);
-            finalSubTypes.push(subTypeEntity.id);
-
-            // Note: references from subtypes will be tracked when the full property/param
-            // is created in the calling methods
-        }
-
-        return finalSubTypes.length ? finalSubTypes : null;
-    }
-
-    /**
-     * Create a TypeInfo object for a given type
-     */
-    private createTypeInfo(
-        id: number,
-        typeName: string,
-        parentId: number,
-        fileIndex: number,
-        lineNumber: number,
-        name: string = 'unnamed'
-    ): TypeInfo {
-        const { baseType, isArray, isMap, isSet, isOptional, isUnion, isFunctionType, functionSignature, subTypes } =
-            this.parseType(typeName);
-
-        // Process main type - either ID or primitive name
-        let finalType: string | number = baseType;
-
-        if (!primitiveTypes.has(baseType)) {
-            const typeEntity = this.findOrCreateEntity(baseType, 'Unknown', fileIndex, lineNumber);
-            finalType = typeEntity.id;
-        }
-
-        // Process subtypes for complex types
-        let finalSubTypes: (string | number)[] | null = null;
-        if (isArray || isMap || isSet || isUnion) {
-            finalSubTypes = this.processSubTypes(subTypes, typeName, fileIndex, lineNumber);
-        }
-
-        return {
-            id,
-            parent: parentId,
-            name,
-            type: finalType,
-            subTypes: finalSubTypes,
-            value: null,
-            isArray,
-            isMap,
-            isSet,
-            isOptional,
-            isUnion,
-            isFunctionType,
-            functionSignature,
-            file: fileIndex,
-            lineNumber
-        };
-    }
 
     /**
      * Build the type database from the loaded files
@@ -222,8 +108,8 @@ export class TypeExtractor {
             this.parseFiles(fileLines[i], i);
         }
 
-        // Update line end for class entities
-        this.updateClassEntityEndLines();
+        // // Update line end for class entities
+        // this.updateClassEntityEndLines();
 
         // Print extraction statistics
         this.logExtractionStats();
@@ -262,7 +148,12 @@ export class TypeExtractor {
                 name: e.name,
                 type: e.type
             }))
-            .sort((a, b) => a.name.localeCompare(b.name));
+            .sort((a, b) => {
+                if (!a.name.localeCompare) {
+                    console.log(a);
+                }
+                return a.name.localeCompare(b.name);
+            });
 
         const propertyNameId = properties
             .map((p) => ({ id: p.id, name: p.name.toLowerCase() }))
@@ -270,7 +161,7 @@ export class TypeExtractor {
         const methodNameId = methods
             .map((m) => ({ id: m.id, name: m.name.toLowerCase() }))
             .sort((a, b) => a.name.localeCompare(b.name));
-        const parammeterNameId = this.functions
+        const parammeterNameId = this.methods
             .flatMap((f) => f.params)
             .map((p) => ({ id: p.id, name: p.name.toLowerCase() }))
             .sort((a, b) => a.name.localeCompare(b.name));
@@ -324,907 +215,470 @@ export class TypeExtractor {
         console.log(`Class Methods: ${totalMethods}`);
     }
 
+    // Patterns for each type of entity
+    // Class: ---@class <Class Name> or ---@class <Class Name> : <Parent Class Name>
+    // Enum: ---@enum <Enum Name>
+    // EnumValue: <Enum Name> = <Value>
+    // Alias: ---@alias <Alias Name>
+    // GlobalFunction: function <Function Name>(<Params,...>) end
+    // Property: ---@field <Property Name> <Type>
+    // Method: function <Class Name>:<Method Name>(<Params,...>) end
+    // Param: ---@param <Param Name> <Type>
+    // Return: ---@return <Type>
+    private patterns = {
+        Class: /---@class\s+(\w+)(?:\s*:\s*(\w+))?/,
+        Enum: /---@enum\s+(\w+)/,
+        EnumValue: /\s*(\w+)\s*=\s*(\w+)/,
+        Alias: /---@alias\s+(\w+)(?:\s*(\w+))?/,
+        GlobalFunction: /function\s+([^:\s]+)\s*\(.*\)\s*end/,
+        Property: /---@field\s+(\w+)\s+(\w+)/,
+        Method: /function\s+(\w+)\s*:\s*(\w+)\s*\(.*\)\s*end/,
+        Param: /---@param\s+(\w+)\s+(\w+)/,
+        Return: /---@return\s+(\w+)/
+    };
+
+    private enumNames: Map<string, number> = new Map();
+
+    private typeParseMap: Map<
+        string,
+        (match: RegExpMatchArray, fileLines: string[], lineNumber: number, fileIndex: number) => number
+    > = new Map([
+        ['Class', this.parseClass],
+        ['Enum', this.parseEnum],
+        ['Alias', this.parseAlias],
+        ['GlobalFunction', this.parseGlobalFunction]
+    ]);
+
     private parseFiles(fileLines: string[], fileIndex: number) {
-        // the first thing we do is a full pass to find all the classes and enums
-        // and store them in a map
-        this.generateEntities(fileLines, fileIndex);
-
-        // now that we know our entities, we can generate the properties and functions
-        this.extractProperties(fileLines, fileIndex);
-
-        // Extract class methods
-        this.extractClassMethods(fileLines, fileIndex);
-
-        // Extract global functions
-        this.extractGlobalFunctions(fileLines, fileIndex);
-    }
-
-    private generateEntities(fileLines: string[], fileIndex: number) {
-        let currentComplexAlias: Entity | null = null;
-        let complexAliasOptions: string[] = [];
+        console.log(`🗄️ Parsing file ${fileIndex} with ${fileLines.length} lines.`);
+        const patterns = Object.entries(this.patterns);
 
         for (let i = 0; i < fileLines.length; i++) {
+            let skipTo = 0;
             const line = fileLines[i];
 
-            if (line.startsWith('---@class')) {
-                currentComplexAlias = null; // Reset complex alias tracking
+            for (const [type, pattern] of patterns) {
+                const match = line.match(pattern);
+                let found = false;
 
-                const classMatch = line.match(/^---@class\s+([A-Za-z0-9_]+)(?:\s*:\s*([A-Za-z0-9_]+))?/);
-                if (!classMatch || !classMatch[1]) continue;
+                if (match) {
+                    const parseFunction = this.typeParseMap.get(type);
 
-                const className = classMatch[1];
-                const parentName = classMatch[2] || null;
-
-                // because we could have previously created the class for being a parent
-                // we need to check if the class is already in the map
-                let entity = this.classes.get(className);
-
-                if (!entity) {
-                    entity = this.createEntity(className, 'Class', fileIndex, i);
-                    this.classes.set(className, entity);
-                    this.entities.push(entity);
-                }
-
-                entity.type = 'Class';
-                entity.lineStart = i;
-
-                if (parentName) {
-                    let parent = this.classes.get(parentName);
-
-                    if (!parent) {
-                        // since the parent is not found let's create a new entity for it
-                        parent = this.createEntity(parentName, 'Unknown', fileIndex, i);
-                        this.classes.set(parentName, parent);
-                        this.entities.push(parent);
-                    }
-
-                    parent.childs.push(entity.id);
-                    entity.hasParent = true;
-                    entity.parent = parent.id;
-                }
-            } else if (line.startsWith('---@enum')) {
-                currentComplexAlias = null; // Reset complex alias tracking
-
-                const enumMatch = line.match(/^---@enum\s+([A-Za-z0-9_]+)/);
-                if (!enumMatch || !enumMatch[1]) continue;
-
-                const enumName = enumMatch[1];
-                const entity = this.createEntity(enumName, 'Enum', fileIndex, i);
-                this.enums.set(enumName, entity);
-                this.entities.push(entity);
-            } else if (line.startsWith('---@alias')) {
-                // Handle different alias formats:
-                // 1. Simple: ---@alias int8 integer
-                // 2. Complex with options: ---@alias PropertyTypes (followed by ---| entries)
-
-                const simpleAliasMatch = line.match(/^---@alias\s+([A-Za-z0-9_]+)\s+([A-Za-z0-9_|\s<>]+)/);
-
-                if (simpleAliasMatch && simpleAliasMatch[1] && simpleAliasMatch[2]) {
-                    currentComplexAlias = null; // Reset complex alias tracking
-
-                    const aliasName = simpleAliasMatch[1];
-                    const aliasType = simpleAliasMatch[2].trim();
-
-                    // Create an entity for this alias
-                    const entity = this.createEntity(aliasName, 'Alias', fileIndex, i);
-
-                    // Set what this alias points to
-                    if (primitiveTypes.has(aliasType)) {
-                        entity.aliasFor = aliasType;
-                    } else {
-                        // Try to resolve the aliased type
-                        let aliasedEntity =
-                            this.classes.get(aliasType) || this.enums.get(aliasType) || this.aliases.get(aliasType);
-
-                        if (!aliasedEntity) {
-                            // Create unknown entity if it doesn't exist
-                            aliasedEntity = this.createEntity(aliasType, 'Unknown', fileIndex, i);
-                            this.entities.push(aliasedEntity);
-
-                            // Determine what collection to add it to
-                            if (aliasType.includes('|')) {
-                                // It's a union type
-                                this.aliases.set(aliasType, aliasedEntity);
-                            } else {
-                                // Default to class for now
-                                this.classes.set(aliasType, aliasedEntity);
-                            }
-                        }
-
-                        entity.aliasFor = aliasedEntity.id;
-                    }
-
-                    // Store the alias
-                    this.aliases.set(aliasName, entity);
-                    this.entities.push(entity);
-                } else {
-                    // Handle complex alias (like PropertyTypes with multiple options)
-                    const complexAliasMatch = line.match(/^---@alias\s+([A-Za-z0-9_]+)\s*$/);
-
-                    if (complexAliasMatch && complexAliasMatch[1]) {
-                        const aliasName = complexAliasMatch[1];
-
-                        // Create an entity for this complex alias
-                        const entity = this.createEntity(aliasName, 'Alias', fileIndex, i);
-
-                        // For complex aliases, we'll collect options
-                        currentComplexAlias = entity;
-                        complexAliasOptions = [];
-
-                        // Store the alias
-                        this.aliases.set(aliasName, entity);
-                        this.entities.push(entity);
+                    if (parseFunction) {
+                        skipTo = parseFunction.bind(this)(match, fileLines, i, fileIndex);
+                        found = true;
                     }
                 }
-            } else if (line.startsWith('---|') && currentComplexAlias) {
-                // This is an option for a complex alias like PropertyTypes
-                // Format: ---| `PropertyTypes.ObjectProperty`
-                const optionMatch = line.match(/^---\|\s*`([^`]+)`/);
-                if (optionMatch && optionMatch[1]) {
-                    complexAliasOptions.push(optionMatch[1]);
-                }
-            } else if (currentComplexAlias && line.trim() && !line.startsWith('---')) {
-                // End of complex alias (reached a non-comment line like "PropertyTypes = {}")
-                if (complexAliasOptions.length > 0) {
-                    // Store the collected options in the currentComplexAlias
-                    const optionsProperty: Property = {
-                        id: this.properties.length,
-                        parent: currentComplexAlias.id,
-                        name: 'options',
-                        type: 'array',
-                        subTypes: complexAliasOptions.map((option) => option),
-                        value: null,
-                        isArray: true,
-                        isMap: false,
-                        isSet: false,
-                        isOptional: false,
-                        isUnion: false,
-                        isFunctionType: false,
-                        functionSignature: null,
-                        file: fileIndex,
-                        lineNumber: i
-                    };
 
-                    currentComplexAlias.properties.push(optionsProperty);
-                    this.properties.push(optionsProperty);
-                }
+                if (found) break;
+            }
 
-                // Reset tracking
-                currentComplexAlias = null;
-                complexAliasOptions = [];
+            if (skipTo > i) {
+                i = skipTo;
+            }
+        }
+    }
+
+    private parseClass(match: RegExpMatchArray, fileLines: string[], lineNumber: number, fileIndex: number) {
+        const className = match[1];
+        const parentClassName = match.length > 2 ? match[2] : null;
+
+        const parentEntity = parentClassName
+            ? this.getOrCreateEntity(EntityType.Unknown, null, parentClassName, lineNumber, fileIndex)
+            : null;
+
+        const entity = this.getOrCreateEntity(EntityType.Class, parentEntity, className, lineNumber, fileIndex);
+
+        let lastLine = lineNumber + 2;
+
+        // Parse properties
+        for (let j = lineNumber + 1; j < fileLines.length; j++) {
+            const line = fileLines[j];
+
+            const propertyMatch = line.match(this.patterns.Property);
+
+            if (propertyMatch) {
+                const propertyName = propertyMatch[1];
+                const propertyType = propertyMatch[2];
+
+                const refId = this.properties.length + 1;
+                const refBy = { id: entity.id, type: EntityReferenceType.prop };
+
+                const typeRefs = this.parseType(refBy, propertyType, j, fileIndex);
+
+                const property: Property = {
+                    id: refId,
+                    parent: entity.id,
+                    name: propertyName,
+                    type: propertyType,
+                    typeRefs,
+                    value: null,
+                    file: fileIndex,
+                    lineNumber: j
+                };
+
+                entity.properties.push(property);
+                this.properties.push(property);
+
+                continue;
+            }
+
+            const methodMatch = line.match(this.patterns.Method);
+
+            if (methodMatch) {
+                const methodName = methodMatch[2];
+
+                const method = this.parseMethod(entity.id, methodName, fileLines, j, fileIndex);
+
+                entity.methods.push(method);
+                this.methods.push(method);
+
+                continue;
+            }
+
+            const done =
+                this.patterns.Class.test(line) ||
+                this.patterns.Enum.test(line) ||
+                this.patterns.Alias.test(line) ||
+                this.patterns.GlobalFunction.test(line);
+
+            if (done) {
+                lastLine = j - 1;
+                break;
             }
         }
 
-        // Handle case where the file ends with a complex alias
-        if (currentComplexAlias && complexAliasOptions.length > 0) {
-            // Store the collected options in the currentComplexAlias
-            const optionsProperty: Property = {
-                id: this.properties.length,
-                parent: currentComplexAlias.id,
-                name: 'options',
-                type: 'array',
-                subTypes: complexAliasOptions.map((option) => option),
-                value: null,
-                isArray: true,
-                isMap: false,
-                isSet: false,
-                isOptional: false,
-                isUnion: false,
-                isFunctionType: false,
-                functionSignature: null,
-                file: fileIndex,
-                lineNumber: fileLines.length - 1
-            };
+        entity.lineEnd = lastLine;
 
-            currentComplexAlias.properties.push(optionsProperty);
-            this.properties.push(optionsProperty);
-        }
+        return lastLine;
     }
 
-    private createEntity(
+    private parseEnum(match: RegExpMatchArray, fileLines: string[], lineNumber: number, fileIndex: number) {
+        const enumName = match[1];
+
+        const enumEntity = this.getOrCreateEntity(EntityType.Enum, null, enumName, lineNumber, fileIndex);
+
+        let lastLine = lineNumber + 1;
+
+        for (let j = lineNumber + 2; j < fileLines.length; j++) {
+            const line = fileLines[j];
+
+            const valueMatch = line.match(this.patterns.EnumValue);
+
+            if (valueMatch) {
+                const valueName = valueMatch[1];
+                const valueValue = valueMatch[2];
+
+                const value: Property = {
+                    id: this.properties.length + 1,
+                    parent: enumEntity.id,
+                    name: valueName,
+                    value: valueValue,
+                    type: 'integer',
+                    typeRefs: null,
+                    file: fileIndex,
+                    lineNumber: j
+                };
+
+                enumEntity.properties.push(value);
+                this.properties.push(value);
+
+                continue;
+            }
+
+            // check for } closing the enum
+            const done = /}/.test(line);
+
+            if (done) {
+                lastLine = j + 1;
+                break;
+            }
+        }
+
+        enumEntity.lineEnd = lastLine;
+
+        return lastLine;
+    }
+
+    private parseAlias(match: RegExpMatchArray, fileLines: string[], lineNumber: number, fileIndex: number) {
+        const aliasName = match[1];
+        const aliasType = match[2]?.trim();
+
+        const aliasEntity = this.getOrCreateEntity(EntityType.Alias, null, aliasName, lineNumber, fileIndex);
+
+        const properties: Property[] = [];
+
+        // Handle different alias formats:
+        // 1. Simple: ---@alias int8 integer
+        // 2. Complex with options: ---@alias PropertyTypes (followed by ---| entries)
+        if (aliasType) {
+            const property: Property = {
+                id: this.properties.length + 1,
+                parent: aliasEntity.id,
+                name: 'aliases',
+                type: 'string',
+                value: aliasType,
+                typeRefs: null,
+                file: fileIndex,
+                lineNumber: lineNumber
+            };
+
+            properties.push(property);
+            this.properties.push(property);
+        }
+
+        let lastLine = lineNumber + 1;
+
+        for (let j = lineNumber + 1; j < fileLines.length; j++) {
+            const line = fileLines[j];
+
+            const done =
+                this.patterns.Class.test(line) ||
+                this.patterns.Enum.test(line) ||
+                this.patterns.Alias.test(line) ||
+                this.patterns.GlobalFunction.test(line);
+
+            if (done) {
+                lastLine = j - 1;
+                break;
+            }
+        }
+
+        aliasEntity.properties = properties;
+        aliasEntity.lineEnd = lastLine;
+
+        return lastLine;
+    }
+
+    private parseGlobalFunction(match: RegExpMatchArray, fileLines: string[], lineNumber: number, fileIndex: number) {
+        const globalFunctionName = match[1];
+        const globalFunctionEntity = this.getOrCreateEntity(
+            EntityType.GlobalFunction,
+            null,
+            globalFunctionName,
+            lineNumber,
+            fileIndex
+        );
+
+        return lineNumber + 1;
+    }
+
+    private typeSetMap: Map<EntityType, Map<string, Entity>> = new Map([
+        [EntityType.Class, this.classes],
+        [EntityType.Enum, this.enums],
+        [EntityType.Alias, this.aliases],
+        [EntityType.GlobalFunction, this.globalFunctions]
+    ]);
+
+    private getOrCreateEntity(
+        type: EntityType,
+        parent: Entity | null,
         name: string,
-        type: 'Class' | 'Enum' | 'Alias' | 'GlobalFunction' | 'Unknown',
+        line: number,
         fileIndex: number,
-        fileLine: number
-    ): Entity {
-        const entity: Entity = {
-            id: this.entities.length,
-            name,
-            type,
-            hasParent: false,
-            parent: null,
-            refNumber: 0,
-            references: [],
-            childs: [],
-            aliasFor: undefined,
-            properties: [],
-            methods: [],
-            file: fileIndex,
-            lineStart: fileLine,
-            lineEnd: fileLine
-        };
+        refBy?: { id: number; type: EntityReferenceType }
+    ) {
+        let entity = this.entityMap.get(name);
+
+        if (!entity) {
+            entity = {
+                id: this.entities.length + 1,
+                name,
+                type: type,
+                hasParent: !!parent,
+                parent: parent?.id ?? null,
+                refNumber: 0,
+                references: [],
+                childs: [],
+                file: fileIndex,
+                properties: [],
+                methods: [],
+                params: [],
+                lineStart: line,
+                lineEnd: line
+            };
+
+            this.entityMap.set(name, entity);
+            this.entities.push(entity);
+        }
+
+        if (entity.type === EntityType.Unknown) {
+            entity.parent = parent?.id ?? null;
+            entity.hasParent = !!parent;
+            entity.type = type;
+            entity.file = fileIndex;
+            entity.lineStart = line;
+            entity.lineEnd = line;
+        }
+
+        if (refBy) entity.references.push(refBy);
+        if (parent) parent.childs.push(entity.id);
+
+        this.typeSetMap.get(type)?.set(name, entity);
 
         return entity;
     }
 
-    /**
-     * Create a property with proper type handling
-     */
-    private createProperty(
-        name: string,
-        type: string,
-        parent: number,
-        value: string | null,
-        fileIndex: number,
-        fileLine: number
-    ): Property {
-        // Use the createTypeInfo helper
-        const typeInfo = this.createTypeInfo(this.properties.length, type, parent, fileIndex, fileLine, name);
+    // Type: Types required to be extracted cause nesting can happen.
+    // Examples:
+    // * TArray<T>
+    // * TMap<TKey, TValue>
+    // * TSet<T>
+    // * <T>[]
+    // * TArray<TArray<T>>
+    // * TMap<TMap<TKey, TValue>, TKey>
+    // * TSet<TSet<T>>
+    // * <T>[][]
+    // * TArray<TArray<TArray<T>>>
+    // * TMap<TMap<TMap<TKey, TValue>, TKey>, TKey>
+    // * TSet<TSet<TSet<T>>>
+    // * T, T, T
+    // * fun(self: UObject, ...)
+    private parseType(refBy: { id: number; type: EntityReferenceType }, type: string, line: number, fileIndex: number) {
+        const tokens = this.tokenizeType(type);
+        const typeRefs: Record<string, number> = {};
+        let foundEntity = false;
 
-        // Convert to a Property
-        const property: Property = {
-            ...typeInfo,
-            value
+        for (const token of tokens) {
+            if (primitiveTypes.has(token)) {
+                continue;
+            }
+
+            const entity = this.getOrCreateEntity(EntityType.Unknown, null, token, line, fileIndex, refBy);
+
+            if (entity) {
+                foundEntity = true;
+                typeRefs[token] = entity.id;
+                entity.references.push(refBy);
+            }
+        }
+
+        if (!foundEntity) return null;
+
+        return typeRefs;
+    }
+
+    private tokenizeType(type: string): Set<string> {
+        const tokens: string[] = [];
+        let i = 0;
+
+        while (i < type.length) {
+            const char = type[i];
+
+            // Skip whitespace
+            if (/\s/.test(char)) {
+                i++;
+                continue;
+            }
+
+            // Handle multi-character operators
+            if (i < type.length - 2 && type.substr(i, 3) === '...') {
+                tokens.push('...');
+                i += 3;
+                continue;
+            }
+
+            // Handle identifiers and keywords
+            if (/[a-zA-Z_]/.test(char)) {
+                let identifier = '';
+                while (i < type.length && /[a-zA-Z0-9_]/.test(type[i])) {
+                    identifier += type[i];
+                    i++;
+                }
+                tokens.push(identifier);
+                continue;
+            }
+
+            // Handle numbers
+            if (/[0-9]/.test(char)) {
+                let number = '';
+                while (i < type.length && /[0-9]/.test(type[i])) {
+                    number += type[i];
+                    i++;
+                }
+                tokens.push(number);
+                continue;
+            }
+
+            // Handle unknown characters by skipping them
+            i++;
+        }
+
+        return new Set(tokens);
+    }
+
+    private parseMethod(entityId: number, name: string, fileLines: string[], lineNumber: number, fileIndex: number) {
+        const method: Method = {
+            id: this.methods.length + 1,
+            parent: entityId,
+            name,
+            return: null!,
+            params: [],
+            file: fileIndex,
+            lineNumber: lineNumber
         };
 
-        // Track references from this property to other entities
-        this.trackTypeWithSubtypesReferences(property, property.id, 'prop');
+        const params: Parameter[] = [];
 
-        return property;
-    }
+        for (let i = lineNumber - 1; i > 0; i--) {
+            const line = fileLines[i];
 
-    /**
-     * Parse a type string into its components
-     */
-    private parseType(type: string): {
-        baseType: string;
-        isArray: boolean;
-        isMap: boolean;
-        isSet: boolean;
-        isOptional: boolean;
-        isUnion: boolean;
-        isFunctionType: boolean;
-        functionSignature: string | null;
-        subTypes: string[] | null;
-    } {
-        // Default values
-        const result = {
-            baseType: type.trim(), // Trim the type to remove leading/trailing spaces
-            isArray: false,
-            isMap: false,
-            isSet: false,
-            isOptional: false,
-            isUnion: false,
-            isFunctionType: false,
-            functionSignature: null as string | null,
-            subTypes: null as string[] | null
-        };
+            const paramMatch = line.match(this.patterns.Param);
+            const returnMatch = line.match(this.patterns.Return);
 
-        // Check for optional types (ending with ?)
-        if (result.baseType.endsWith('?')) {
-            result.isOptional = true;
-            result.baseType = result.baseType.slice(0, -1).trim();
-        }
-
-        // Check for union types (containing |)
-        if (result.baseType.includes('|')) {
-            result.isUnion = true;
-            result.subTypes = result.baseType.split('|').map((t) => t.trim());
-
-            // Check if any union type is optional
-            if (result.subTypes.some((t) => t.endsWith('?'))) {
-                result.isOptional = true;
-                result.subTypes = result.subTypes.map((t) => (t.endsWith('?') ? t.slice(0, -1).trim() : t.trim()));
-            }
-
-            // Set the base type to "union"
-            result.baseType = 'union';
-            return result;
-        }
-
-        // Check for array notation (ending with [])
-        if (result.baseType.endsWith('[]')) {
-            result.isArray = true;
-            result.baseType = result.baseType.slice(0, -2).trim();
-            result.subTypes = [result.baseType];
-            return {
-                ...result,
-                baseType: 'array'
-            };
-        }
-
-        // Normalize type by removing spaces between generic brackets
-        result.baseType = this.normalizeGenericSpaces(result.baseType);
-
-        // Check for TArray<>
-        if (result.baseType.startsWith('TArray<')) {
-            // Extract content between angle brackets, handling nested generics
-            const content = this.extractGenericContent(result.baseType);
-
-            result.isArray = true;
-            result.baseType = 'TArray';
-            result.subTypes = content ? [content.trim()] : null;
-            return result;
-        }
-
-        // Check for TMap<>
-        if (result.baseType.startsWith('TMap<')) {
-            // Extract content between angle brackets, handling nested generics
-            const content = this.extractGenericContent(result.baseType);
-
-            if (content) {
-                // Find the comma that separates key and value type, accounting for nesting
-                const separatorIndex = this.findGenericSeparator(content);
-
-                if (separatorIndex !== -1) {
-                    const keyType = content.substring(0, separatorIndex).trim();
-                    const valueType = content.substring(separatorIndex + 1).trim();
-
-                    result.isMap = true;
-                    result.baseType = 'map';
-                    result.subTypes = [keyType, valueType];
-                    return result;
-                }
-            }
-
-            // Fallback if we couldn't properly parse the TMap
-            console.warn(`Warning: Failed to parse TMap: ${result.baseType}`);
-            result.isMap = true;
-            result.baseType = 'map';
-            return result;
-        }
-
-        // Check for TSet<>
-        if (result.baseType.startsWith('TSet<')) {
-            // Extract content between angle brackets, handling nested generics
-            const content = this.extractGenericContent(result.baseType);
-
-            result.isSet = true;
-            result.baseType = 'set';
-            result.subTypes = content ? [content.trim()] : null;
-            return result;
-        }
-
-        // Check for function types
-        if (result.baseType.startsWith('fun(')) {
-            result.isFunctionType = true;
-            result.functionSignature = result.baseType;
-            result.baseType = 'function';
-            return result;
-        }
-
-        return result;
-    }
-
-    /**
-     * Normalize spaces in generic types to handle cases like "TMap < Key, Value >"
-     */
-    private normalizeGenericSpaces(type: string): string {
-        // First normalize spaces around angle brackets
-        let normalized = type.replace(/\s*<\s*/g, '<').replace(/\s*>\s*/g, '>');
-
-        // For TMap, normalize spaces around the comma
-        if (normalized.startsWith('TMap<') || normalized.startsWith('TArray<') || normalized.startsWith('TSet<')) {
-            // Use a regex that matches commas outside of nested angle brackets
-            let depth = 0;
-            let result = '';
-
-            for (let i = 0; i < normalized.length; i++) {
-                const char = normalized[i];
-
-                if (char === '<') {
-                    depth++;
-                    result += char;
-                } else if (char === '>') {
-                    depth--;
-                    result += char;
-                } else if (char === ',' && depth === 1) {
-                    // At depth 1, we're at the top level of our generic
-                    result += ','; // Add comma without spaces
-                } else if (char === ' ' && normalized[i - 1] === ',' && depth === 1) {
-                    // Skip space after comma at depth 1
-                    continue;
-                } else {
-                    result += char;
-                }
-            }
-
-            normalized = result;
-        }
-
-        return normalized;
-    }
-
-    /**
-     * Extract the content between angle brackets, handling nested generics
-     */
-    private extractGenericContent(type: string): string | null {
-        // First normalize the type to handle spaces
-        type = this.normalizeGenericSpaces(type);
-
-        const startIndex = type.indexOf('<');
-        if (startIndex === -1) return null;
-
-        let balance = 1; // Start with 1 open bracket
-        let endIndex = -1;
-
-        for (let i = startIndex + 1; i < type.length; i++) {
-            if (type[i] === '<') {
-                balance++;
-            } else if (type[i] === '>') {
-                balance--;
-                if (balance === 0) {
-                    endIndex = i;
-                    break;
-                }
-            }
-        }
-
-        if (endIndex === -1) return null;
-
-        return type.substring(startIndex + 1, endIndex);
-    }
-
-    /**
-     * Find the comma separator in a generic type, ignoring commas within nested generics
-     */
-    private findGenericSeparator(content: string): number {
-        // First normalize the content to handle spaces
-        content = content.trim();
-
-        let balance = 0;
-
-        for (let i = 0; i < content.length; i++) {
-            if (content[i] === '<') {
-                balance++;
-            } else if (content[i] === '>') {
-                balance--;
-            } else if (content[i] === ',' && balance === 0) {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    /**
-     * Helper method to extract a type from a string, handling complex nested types
-     * @param line The line containing the type
-     * @param startPos The position to start extraction (after the name/annotation)
-     * @returns The extracted type string or null if no valid type found
-     */
-    private extractTypeFromLine(line: string, startPos: number): string | null {
-        // Skip the start position to get to the type
-        const remainingLine = line.substring(startPos);
-
-        // Extract the type
-        let typeStr = '';
-        let typeComplete = false;
-        let bracketDepth = 0;
-        let parenDepth = 0;
-
-        for (let j = 0; j < remainingLine.length; j++) {
-            const char = remainingLine[j];
-
-            // Track bracket and parenthesis depth
-            if (char === '<') bracketDepth++;
-            else if (char === '>') bracketDepth--;
-            else if (char === '(') parenDepth++;
-            else if (char === ')') parenDepth--;
-
-            // If we're at depth 0 and hit a whitespace, we've reached the end of the type
-            if (bracketDepth === 0 && parenDepth === 0 && /\s/.test(char) && typeStr.length > 0) {
-                typeComplete = true;
+            if (!paramMatch && !returnMatch) {
                 break;
             }
 
-            if (!typeComplete) {
-                typeStr += char;
-            }
-        }
+            if (returnMatch) {
+                const returnType = returnMatch[1];
 
-        // Trim the type string to remove any trailing whitespace
-        typeStr = typeStr.trim();
+                const refBy = { id: entityId, type: EntityReferenceType.method };
 
-        return typeStr || null;
-    }
+                const typeRefs = this.parseType(refBy, returnType, i, fileIndex);
 
-    private extractProperties(fileLines: string[], fileIndex: number) {
-        // First pass to get all properties
-        for (const entity of this.entities) {
-            // now we know where the entity starts
-            // we parse the whole file until we find the next entity
-            // and we do this for each entity
+                method.return = {
+                    type: returnType,
+                    typeRefs
+                };
 
-            for (let i = entity.lineStart + 1; i < fileLines.length; i++) {
-                const line = fileLines[i];
-
-                // Stop if we hit another entity definition (but allow function declarations for class methods)
-                if (
-                    line.startsWith('---@class') ||
-                    line.startsWith('---@enum') ||
-                    line.startsWith('---@alias')
-                ) {
-                    entity.lineEnd = i - 1;
-                    break;
-                }
-
-                // Check if line is a property annotation
-                if (line.startsWith('---@field')) {
-                    // First, extract the property name
-                    const nameMatch = line.match(/^---@field\s+([A-Za-z0-9_]+)\s+/);
-
-                    if (nameMatch && nameMatch[1]) {
-                        const name = nameMatch[1];
-
-                        // Extract the type using the shared helper
-                        const typeName = this.extractTypeFromLine(line, nameMatch[0].length);
-
-                        if (typeName) {
-                            // Create the property
-                            const property = this.createProperty(name, typeName, entity.id, null, fileIndex, i);
-                            entity.properties.push(property);
-                            this.properties.push(property);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Parse parameter annotation and add to current params
-     */
-    private parseParamAnnotation(
-        line: string,
-        currentParams: Parameter[],
-        fileIndex: number,
-        lineNumber: number
-    ): void {
-        // First, extract the parameter name
-        const nameMatch = line.match(/^---@param\s+([A-Za-z0-9_]+)\s+/);
-        if (!nameMatch || !nameMatch[1]) return;
-
-        const paramName = nameMatch[1];
-
-        // Extract the type using the shared helper
-        const paramTypeStr = this.extractTypeFromLine(line, nameMatch[0].length);
-
-        if (!paramTypeStr) return;
-
-        // Create type info for the parameter
-        const param = this.createTypeInfo(
-            -1,
-            paramTypeStr,
-            0, // Will be set later when function is created
-            fileIndex,
-            lineNumber,
-            paramName
-        );
-
-        currentParams.push(param);
-
-        // We'll track references later when the function is fully created and we have proper IDs
-    }
-
-    /**
-     * Extract return type from a return annotation line
-     */
-    private parseReturnAnnotation(line: string, fileIndex: number, lineNumber: number): string | null {
-        // Match the return annotation prefix
-        const returnNameMatch = line.match(/^---@return\s+/);
-        if (!returnNameMatch) return null;
-
-        // Extract the type using the shared helper
-        return this.extractTypeFromLine(line, returnNameMatch[0].length);
-    }
-
-    /**
-     * Process a function definition line and associated annotations
-     */
-    private processFunction(
-        functionName: string,
-        methodName: string | null,
-        paramsString: string,
-        currentParams: Parameter[],
-        currentReturnType: string | null,
-        fileIndex: number,
-        lineNumber: number
-    ): Entity | Method | null {
-        // For class methods
-
-        // Create return type info
-        const returnInfo = this.createReturnTypeInfo(currentReturnType || 'void', fileIndex, lineNumber);
-
-        if (methodName) {
-            // Look up the class entity
-            const classEntity = this.classes.get(functionName);
-
-            if (!classEntity) {
-                console.warn(`Warning: function found for unknown class: ${functionName}:${methodName}`);
-                return null;
+                continue;
             }
 
-            returnInfo.id = this.numFunctionReturns;
-            this.numFunctionReturns++;
+            if (paramMatch) {
+                const paramName = paramMatch[1];
+                const paramType = paramMatch[2];
 
-            // Create the function
-            const func: Method = {
-                id: this.functions.length,
-                parent: classEntity.id,
-                name: methodName,
-                return: returnInfo,
-                params: currentParams,
-                file: fileIndex,
-                lineNumber
-            };
+                const refBy = { id: entityId, type: EntityReferenceType.method };
 
-            // Set parent for params
-            for (const param of currentParams) {
-                param.id = this.numFunctionParams;
-                this.numFunctionParams++;
-                param.parent = func.id;
-                this.trackTypeWithSubtypesReferences(param, param.id, 'param');
-            }
+                const typeRefs = this.parseType(refBy, paramType, i, fileIndex);
 
-            // Track references from return type to other entities
-            this.trackTypeWithSubtypesReferences(returnInfo, func.id, 'func');
-            // Add function to class
-            classEntity.methods.push(func);
-            this.functions.push(func);
-
-            return func;
-        }
-
-        returnInfo.id = this.numGlobalFunctionReturns;
-        this.numGlobalFunctionReturns++;
-
-        // Create a global function entity
-        const globalFunction = this.createEntity(functionName, 'GlobalFunction', fileIndex, lineNumber);
-        globalFunction.params = currentParams;
-        globalFunction.return = returnInfo;
-
-        for (const param of currentParams) {
-            param.parent = globalFunction.id;
-            this.trackTypeWithSubtypesReferences(param, param.id, 'param');
-        }
-
-        // Set parent references
-        returnInfo.parent = globalFunction.id;
-
-        // Track references from return type to global function
-        this.trackTypeWithSubtypesReferences(returnInfo, globalFunction.id, 'gfunc');
-
-        for (const param of currentParams) {
-            param.id = this.numGlobalFunctionParams;
-            this.numGlobalFunctionParams++;
-            param.parent = globalFunction.id;
-            // Track references from parameter to other entities
-            this.trackTypeWithSubtypesReferences(param, param.id, 'param');
-        }
-
-        // Store the global function
-        this.globalFunctions.set(functionName, globalFunction);
-        this.entities.push(globalFunction);
-
-        return globalFunction;
-    }
-
-    private extractClassMethods(fileLines: string[], fileIndex: number) {
-        this.extractFunctions(fileLines, fileIndex, true);
-    }
-
-    private extractGlobalFunctions(fileLines: string[], fileIndex: number) {
-        this.extractFunctions(fileLines, fileIndex, false);
-    }
-
-    /**
-     * Shared method to extract functions (both class methods and global functions)
-     */
-    private extractFunctions(fileLines: string[], fileIndex: number, isClassMethod: boolean) {
-        // State tracking
-        let currentParams: Parameter[] = [];
-        let currentReturnType: string | null = null;
-        let currentFunctionDescription: string = '';
-        let isCollectingFunction = false;
-
-        for (let i = 0; i < fileLines.length; i++) {
-            const line = fileLines[i].trim();
-
-            // Define regex pattern based on whether we're looking for class methods or global functions
-            const functionPattern = isClassMethod
-                ? /^function\s+([A-Za-z0-9_]+):([A-Za-z0-9_]+)\(([^)]*)\)\s*(?:end)?/
-                : /^function\s+([A-Za-z0-9_]+)\(([^)]*)\)\s*(?:end)?$/;
-
-            // Check for the function definition
-            const functionMatch = line.match(functionPattern);
-
-            if (functionMatch) {
-                if (isClassMethod) {
-                    // Class method: className:methodName(params)
-                    const className = functionMatch[1];
-                    const methodName = functionMatch[2];
-                    const paramsString = functionMatch[3];
-
-                    this.processFunction(
-                        className,
-                        methodName,
-                        paramsString,
-                        currentParams,
-                        currentReturnType,
-                        fileIndex,
-                        i
-                    );
-                } else {
-                    // Global function: functionName(params)
-                    const functionName = functionMatch[1];
-                    const paramsString = functionMatch[2];
-
-                    this.processFunction(
-                        functionName,
-                        null,
-                        paramsString,
-                        currentParams,
-                        currentReturnType,
-                        fileIndex,
-                        i
-                    );
-                }
-
-                // Reset state for next function
-                currentParams = [];
-                currentReturnType = null;
-                currentFunctionDescription = '';
-                isCollectingFunction = false;
-            } else if (line.startsWith('---@param')) {
-                // Parse param annotation
-                this.parseParamAnnotation(line, currentParams, fileIndex, i);
-                isCollectingFunction = true;
-            } else if (line.startsWith('---@return')) {
-                // Parse return annotation with the shared helper
-                currentReturnType = this.parseReturnAnnotation(line, fileIndex, i);
-                if (currentReturnType) {
-                    isCollectingFunction = true;
-                }
-            } else if (line.startsWith('---') && !line.startsWith('---@')) {
-                // Collect function description lines
-                if (isCollectingFunction || currentFunctionDescription.length === 0) {
-                    currentFunctionDescription += line.replace(/^---/, '').trim() + '\n';
-                }
-            } else if (line.trim() !== '' && !line.startsWith('function') && isCollectingFunction) {
-                // Non-function line after collecting function info - reset state
-                currentParams = [];
-                currentReturnType = null;
-                currentFunctionDescription = '';
-                isCollectingFunction = false;
-            }
-        }
-    }
-
-    /**
-     * Create function parameters from parameter string or annotations
-     */
-    private createFunctionParams(
-        paramsString: string,
-        annotatedParams: Parameter[],
-        fileIndex: number,
-        lineNumber: number
-    ): Parameter[] {
-        const functionParams: Parameter[] = [];
-
-        // Use annotated params if available
-        if (annotatedParams.length > 0) {
-            functionParams.push(...annotatedParams);
-        } else {
-            // Otherwise create basic params from the function signature
-            const params = paramsString ? paramsString.split(',').map((p) => p.trim()) : [];
-
-            for (let j = 0; j < params.length; j++) {
-                const paramName = params[j];
-                functionParams.push({
-                    id: this.numFunctionParams,
-                    parent: 0, // Will be set later
+                const param: Parameter = {
+                    id: this.parameters.length + 1,
+                    parent: method.id,
                     name: paramName,
-                    type: 'any', // Default to any if not annotated
-                    isArray: false,
-                    isMap: false,
-                    isSet: false,
-                    isOptional: false,
-                    isUnion: false,
-                    isFunctionType: false,
-                    functionSignature: null,
-                    subTypes: null,
+                    type: paramType,
+                    typeRefs,
                     value: null,
                     file: fileIndex,
-                    lineNumber
-                });
-                this.numFunctionParams++;
+                    lineNumber: i
+                };
+
+                this.parameters.push(param);
+                params.push(param);
+
+                continue;
             }
         }
 
-        return functionParams;
-    }
-
-    /**
-     * Create return type info for a function
-     */
-    private createReturnTypeInfo(returnType: string, fileIndex: number, lineNumber: number): TypeInfo {
-        return this.createTypeInfo(
-            -1,
-            returnType,
-            0, // Will be set later when function is created
-            fileIndex,
-            lineNumber,
-            'return'
-        );
-    }
-
-    /**
-     * Add a reference to an entity
-     */
-    private addReference(
-        entityId: number,
-        referenceId: number,
-        referenceType: 'prop' | 'param' | 'func' | 'gfunc'
-    ): void {
-        const entity = this.entities.find((e) => e.id === entityId);
-        if (!entity) return;
-
-        // Check if reference already exists
-        const existingRef = entity.references.find((ref) => ref.id === referenceId && ref.type === referenceType);
-        if (!existingRef) {
-            entity.references.push({ id: referenceId, type: referenceType });
-            entity.refNumber++;
+        method.params = params;
+        if (!method.return) {
+            method.return = {
+                type: 'void',
+                typeRefs: null
+            };
         }
-    }
 
-    /**
-     * Track references for a type (used in properties, params, returns)
-     */
-    private trackTypeReferences(
-        typeValue: string | number,
-        referenceId: number,
-        referenceType: 'prop' | 'param' | 'func' | 'gfunc'
-    ): void {
-        // Only process entity references (numeric types)
-        if (typeof typeValue === 'number') {
-            this.addReference(typeValue, referenceId, referenceType);
-        }
-    }
-
-    /**
-     * Track references for a type with subtypes
-     */
-    private trackTypeWithSubtypesReferences(
-        typeInfo: TypeInfo,
-        referenceId: number,
-        referenceType: 'prop' | 'param' | 'func' | 'gfunc'
-    ): void {
-        // Track the main type reference
-        this.trackTypeReferences(typeInfo.type, referenceId, referenceType);
-
-        // Track subtype references
-        if (typeInfo.subTypes) {
-            for (const subType of typeInfo.subTypes) {
-                this.trackTypeReferences(subType, referenceId, referenceType);
-            }
-        }
-    }
-
-    /**
-     * Update the end line for class entities based on their methods
-     */
-    private updateClassEntityEndLines() {
-        // Process each class
-        for (const entity of this.entities) {
-            if (entity.type === 'Class' && entity.methods.length > 0) {
-                // Find the last method for this class
-                const methods = entity.methods.sort((a, b) => a.lineNumber - b.lineNumber);
-                const lastMethod = methods[methods.length - 1];
-                
-                // Set the entity end line to be after the last method
-                entity.lineEnd = Math.max(entity.lineEnd, lastMethod.lineNumber + 1);
-            }
-        }
+        return method;
     }
 }

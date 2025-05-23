@@ -1,11 +1,26 @@
+export enum EntityType {
+    Class = 'Class',
+    Enum = 'Enum',
+    Alias = 'Alias',
+    GlobalFunction = 'GlobalFunction',
+    Unknown = 'Unknown'
+}
+
+export enum EntityReferenceType {
+    prop = 'prop',
+    param = 'param',
+    method = 'method',
+    gfunc = 'gfunc'
+}
+
 export interface Entity {
     id: number;
     name: string;
-    type: 'Class' | 'Enum' | 'Alias' | 'GlobalFunction' | 'Unknown';
+    type: EntityType;
     hasParent: boolean;
     parent: number | null;
     refNumber: number;
-    references: Array<{ id: number; type: 'prop' | 'param' | 'func' | 'gfunc' }>;
+    references: Array<{ id: number; type: EntityReferenceType }>;
     childs: number[];
     aliasFor?: string | number; // Stores what this alias represents
 
@@ -20,20 +35,16 @@ export interface Entity {
 }
 
 // Common interface for type information
-export interface TypeInfo {
+export interface TypeMin {
+    type: string;
+    typeRefs: Record<string, number> | null;
+}
+
+export interface TypeInfo extends TypeMin {
     id: number;
     parent: number;
     name: string;
-    type: string | number;
-    subTypes: (string | number)[] | null;
     value: string | null;
-    isArray: boolean;
-    isMap: boolean;
-    isSet: boolean;
-    isOptional: boolean;
-    isUnion: boolean;
-    isFunctionType: boolean;
-    functionSignature: string | null;
     file: number;
     lineNumber: number;
 }
@@ -46,7 +57,7 @@ export interface Method {
     id: number;
     parent: number;
     name: string;
-    return: TypeInfo; 
+    return: TypeMin;
     params: Parameter[];
     file: number;
     lineNumber: number;
