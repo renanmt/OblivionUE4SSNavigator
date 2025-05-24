@@ -3,7 +3,7 @@
 
     export let typeInfo: TypeMin;
 
-    const linkTag: string = '<a href="/entity/{id}">{name}</a>';
+    const linkTag: string = '<a href="/entity/{id}" class="link">{name}</a>';
 
     let type = typeInfo.type;
 

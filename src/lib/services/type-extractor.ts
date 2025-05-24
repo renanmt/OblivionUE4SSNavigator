@@ -70,15 +70,14 @@ const primitiveTypes = new Set<string>([
 ]);
 
 export interface TypeDatabase {
-    classNameId: { id: number; name: string }[];
-    enumNameId: { id: number; name: string }[];
-    aliasNameId: { id: number; name: string }[];
-    globalFunctionNameId: { id: number; name: string }[];
-    entityNameId: { id: number; name: string }[];
-    propertyNameId: { id: number; name: string }[];
-    methodNameId: { id: number; name: string }[];
-    parammeterNameId: { id: number; name: string }[];
-    unknownNameId: { id: number; name: string }[];
+    classMap: Map<number, Class>;
+    enumMap: Map<number, Enum>;
+    aliasMap: Map<number, Alias>;
+    globalFunctionMap: Map<number, GlobalFunction>;
+    propertyMap: Map<number, Property>;
+    methodMap: Map<number, Method>;
+    parameterMap: Map<number, Parameter>;
+    unknownMap: Map<number, Entity>;
     entityMap: Map<number, Entity>;
     entities: Entity[];
     classes: Class[];
@@ -135,45 +134,23 @@ export class TypeExtractor {
         const properties = this.properties.values().toArray();
         const methods = [...classes.flatMap((c) => (c as Class).methods)];
 
-        const classNameId = classes
-            .map((c) => ({ id: c.id, name: c.name.toLowerCase() }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-        const enumNameId = enums
-            .map((e) => ({ id: e.id, name: e.name.toLowerCase() }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-        const aliasNameId = aliases
-            .map((a) => ({ id: a.id, name: a.name.toLowerCase() }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-        const globalFunctionNameId = globalFunctions
-            .map((g) => ({ id: g.id, name: g.name.toLowerCase() }))
-            .sort((a, b) => a.name.localeCompare(b.name));
+        const classMap = new Map<number, Class>(classes.map((c) => [c.id, c]));
+        const enumMap = new Map<number, Enum>(enums.map((e) => [e.id, e]));
+        const aliasMap = new Map<number, Alias>(aliases.map((a) => [a.id, a]));
+        const globalFunctionMap = new Map<number, GlobalFunction>(globalFunctions.map((g) => [g.id, g]));
+        const propertyMap = new Map<number, Property>(properties.map((p) => [p.id, p]));
+        const methodMap = new Map<number, Method>(methods.map((m) => [m.id, m]));
+        const parameterMap = new Map<number, Parameter>(methods.flatMap((m) => m.params).map((p) => [p.id, p]));
 
         const unknowns: Entity[] = [];
-        let unknownNameId: { id: number; name: string }[] = [];
-        let entityNameId: { id: number; name: string; type: EntityType }[] = [];
 
         for (const e of this.entities) {
-            entityNameId.push({ id: e.id, name: e.name, type: e.type });
-
             if (e.type === EntityType.Unknown) {
-                unknownNameId.push({ id: e.id, name: e.name.toLowerCase() });
                 unknowns.push(e);
             }
         }
 
-        entityNameId = entityNameId.sort((a, b) => a.name.localeCompare(b.name));
-        unknownNameId = unknownNameId.sort((a, b) => a.name.localeCompare(b.name));
-
-        const propertyNameId = properties
-            .map((p) => ({ id: p.id, name: p.name.toLowerCase() }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-        const methodNameId = methods
-            .map((m) => ({ id: m.id, name: m.name.toLowerCase() }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-        const parammeterNameId = this.methods
-            .flatMap((f) => f.params)
-            .map((p) => ({ id: p.id, name: p.name.toLowerCase() }))
-            .sort((a, b) => a.name.localeCompare(b.name));
+        const unknownMap = new Map<number, Entity>(unknowns.map((u) => [u.id, u]));
 
         const entityMap = new Map<number, Entity>();
 
@@ -182,15 +159,14 @@ export class TypeExtractor {
         }
 
         const typeDatabase: TypeDatabase = {
-            classNameId,
-            enumNameId,
-            aliasNameId,
-            globalFunctionNameId,
-            entityNameId,
-            propertyNameId,
-            methodNameId,
-            parammeterNameId,
-            unknownNameId,
+            classMap,
+            enumMap,
+            aliasMap,
+            globalFunctionMap,
+            propertyMap,
+            methodMap,
+            parameterMap,
+            unknownMap,
             entityMap,
             entities: this.entities,
             classes,
@@ -665,14 +641,11 @@ export class TypeExtractor {
         let tokens: Set<string> = new Set();
         if (type.includes('fun')) {
             const funMatch = type.match(this.patterns.ParamFun);
-            console.log('FUN', funMatch);
             for (const match of funMatch ?? []) {
                 const t = this.tokenizeType(match);
                 tokens = tokens.union(t);
             }
         } else tokens = this.tokenizeType(type);
-
-        if (type.includes('fun')) console.log(type, 'TOKENS', tokens);
 
         const typeRefs: Record<string, number> = {};
         let foundEntity = false;

@@ -5,14 +5,14 @@ import { TypeExtractor, type TypeDatabase } from './type-extractor';
 
 // Create a default empty database structure to use before data is loaded
 const emptyDatabase: TypeDatabase = {
-    classNameId: [],
-    enumNameId: [],
-    aliasNameId: [],
-    globalFunctionNameId: [],
-    entityNameId: [],
-    propertyNameId: [],
-    methodNameId: [],
-    parammeterNameId: [],
+    classMap: new Map(),
+    enumMap: new Map(),
+    aliasMap: new Map(),
+    globalFunctionMap: new Map(),
+    propertyMap: new Map(),
+    methodMap: new Map(),
+    parameterMap: new Map(),
+    unknownMap: new Map(),
     entityMap: new Map(),
     entities: [],
     classes: [],
@@ -22,7 +22,6 @@ const emptyDatabase: TypeDatabase = {
     properties: [],
     methods: [],
     unknowns: [],
-    unknownNameId: [],
     fileContents: []
 };
 
@@ -99,12 +98,18 @@ function createInternalStore() {
         search: (
             query: string,
             filters: {
-                includeEntities?: boolean;
+                includeClasses?: boolean;
+                includeEnums?: boolean;
+                includeAliases?: boolean;
+                includeGlobalFunctions?: boolean;
                 includeProperties?: boolean;
                 includeMethods?: boolean;
                 includeParameters?: boolean;
             } = {
-                includeEntities: true,
+                includeClasses: true,
+                includeEnums: true,
+                includeAliases: true,
+                includeGlobalFunctions: true,
                 includeProperties: false,
                 includeMethods: false,
                 includeParameters: false
@@ -127,14 +132,26 @@ function createInternalStore() {
                 parameters: [] as Parameter[]
             };
 
-            // Search through entities if included in filters
-            if (filters.includeEntities) {
-                results.entities = [
-                    ...database.classes,
-                    ...database.enums,
-                    ...database.aliases,
-                    ...database.globalFunctions
-                ].filter((entity) => entity.name.toLowerCase().includes(lowerQuery));
+            // Search through entities based on their specific types
+            if (filters.includeClasses) {
+                results.entities.push(
+                    ...database.classes.filter((entity) => entity.name.toLowerCase().includes(lowerQuery))
+                );
+            }
+            if (filters.includeEnums) {
+                results.entities.push(
+                    ...database.enums.filter((entity) => entity.name.toLowerCase().includes(lowerQuery))
+                );
+            }
+            if (filters.includeAliases) {
+                results.entities.push(
+                    ...database.aliases.filter((entity) => entity.name.toLowerCase().includes(lowerQuery))
+                );
+            }
+            if (filters.includeGlobalFunctions) {
+                results.entities.push(
+                    ...database.globalFunctions.filter((entity) => entity.name.toLowerCase().includes(lowerQuery))
+                );
             }
 
             // Search through properties if included in filters
@@ -151,10 +168,9 @@ function createInternalStore() {
 
             // Search through parameters if included in filters
             if (filters.includeParameters) {
-                // For parameters, we need to go through all methods and their parameters
                 const paramResults = [];
 
-                // First check method parameters
+                // Check method parameters
                 for (const method of database.methods) {
                     const matchingParams = method.params.filter((param) =>
                         param.name.toLowerCase().includes(lowerQuery)
@@ -162,7 +178,7 @@ function createInternalStore() {
                     paramResults.push(...matchingParams);
                 }
 
-                // Then check global function parameters
+                // Check global function parameters
                 for (const func of database.globalFunctions) {
                     if (func.params) {
                         const matchingParams = func.params.filter((param) =>

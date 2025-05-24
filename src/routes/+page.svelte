@@ -4,6 +4,7 @@
     import SearchResults from '$lib/components/SearchResults.svelte';
     import { dataStore } from '$lib/services/dataLoader';
     import type { Entity, Property, Method, Parameter } from '$lib/types';
+    
     let searchResults = {
         entities: [] as Entity[],
         properties: [] as Property[],

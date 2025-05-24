@@ -12,7 +12,7 @@
     }>();
 
     let searchQuery = '';
-    let filters = ['entities', 'properties', 'functions', 'params'];
+    let filters = ['classes', 'enums', 'aliases', 'global_functions'];
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     export let autoSearch = false;
@@ -47,15 +47,18 @@
             return;
         }
 
-        // Use the search function with proper filters
+        // Map filters to search options
         const results = dataStore.search(searchQuery, {
-            includeEntities: filters.includes('entities'),
+            includeClasses: filters.includes('classes'),
+            includeEnums: filters.includes('enums'),
+            includeAliases: filters.includes('aliases'),
+            includeGlobalFunctions: filters.includes('global_functions'),
             includeProperties: filters.includes('properties'),
-            includeMethods: filters.includes('functions'),
-            includeParameters: filters.includes('params')
+            includeMethods: filters.includes('methods'),
+            includeParameters: filters.includes('parameters')
         });
 
-        // Map methods to functions and parameters to params for UI consistency
+        // Map results to UI structure
         searchResults = {
             entities: results.entities,
             properties: results.properties,
@@ -168,12 +171,44 @@
 
     <div class="mt-3 mb-4 flex flex-wrap gap-2">
         <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('entities')
+            class="rounded-full px-3 py-1 text-sm {filters.includes('classes')
                 ? 'bg-[#3a4577] text-white'
                 : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('entities')}
+            on:click={() => toggleFilter('classes')}
         >
-            Entities
+            Classes
+        </button>
+        <button
+            class="rounded-full px-3 py-1 text-sm {filters.includes('enums')
+                ? 'bg-[#3a4577] text-white'
+                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
+            on:click={() => toggleFilter('enums')}
+        >
+            Enums
+        </button>
+        <button
+            class="rounded-full px-3 py-1 text-sm {filters.includes('aliases')
+                ? 'bg-[#3a4577] text-white'
+                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
+            on:click={() => toggleFilter('aliases')}
+        >
+            Aliases
+        </button>
+        <button
+            class="rounded-full px-3 py-1 text-sm {filters.includes('global_functions')
+                ? 'bg-[#3a4577] text-white'
+                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
+            on:click={() => toggleFilter('global_functions')}
+        >
+            Global Functions
+        </button>
+        <button
+            class="rounded-full px-3 py-1 text-sm {filters.includes('methods')
+                ? 'bg-[#3a4577] text-white'
+                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
+            on:click={() => toggleFilter('methods')}
+        >
+            Methods
         </button>
         <button
             class="rounded-full px-3 py-1 text-sm {filters.includes('properties')
@@ -184,18 +219,10 @@
             Properties
         </button>
         <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('functions')
+            class="rounded-full px-3 py-1 text-sm {filters.includes('parameters')
                 ? 'bg-[#3a4577] text-white'
                 : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('functions')}
-        >
-            Functions
-        </button>
-        <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('params')
-                ? 'bg-[#3a4577] text-white'
-                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('params')}
+            on:click={() => toggleFilter('parameters')}
         >
             Parameters
         </button>
