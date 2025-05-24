@@ -1,10 +1,11 @@
 <script lang="ts">
-    import { dataStore, type Entity, type Property, type Function, type FunctionParam } from '$lib/services/dataLoader';
+    import { dataStore } from '$lib/services/dataLoader';
+    import { type Entity, type Property, type Method, type Parameter, type Class, EntityType } from '$lib/types';
 
     export let entities: Entity[] = [];
     export let properties: Property[] = [];
-    export let functions: Function[] = [];
-    export let params: FunctionParam[] = [];
+    export let functions: Method[] = [];
+    export let params: Parameter[] = [];
 
     // Tab management
     type TabType = 'entities' | 'properties' | 'functions' | 'params';
@@ -150,9 +151,9 @@
                                 {truncateName(entity.name)}
                             </h3>
                             <p class="text-sm text-gray-400">{entity.type}</p>
-                            {#if entity.hasParent && entity.parent !== null}
+                            {#if entity.type === EntityType.Class && (entity as Class).hasParent && (entity as Class).parent !== null}
                                 <p class="mt-1 text-xs text-gray-400">
-                                    Parent: {getEntityName(entity.parent)}
+                                    Parent: {getEntityName((entity as Class).parent as number)}
                                 </p>
                             {/if}
                         </a>
@@ -244,7 +245,7 @@
                             <tr class="bg-[#111422]">
                                 <th class="p-2 text-left text-gray-300">Name</th>
                                 <th class="p-2 text-left text-gray-300">Type</th>
-                                <th class="p-2 text-left text-gray-300">Function</th>
+                                <th class="p-2 text-left text-gray-300">Method</th>
                             </tr>
                         </thead>
                         <tbody>

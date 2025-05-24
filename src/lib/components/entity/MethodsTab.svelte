@@ -1,11 +1,10 @@
 <script lang="ts">
-    import type { Function, FunctionParam } from '$lib/services/dataLoader';
     import PropertyTable from '../PropertyTable.svelte';
     import TypeRef from '../TypeRef.svelte';
     import FilterInput from '../common/FilterInput.svelte';
-    import { dataStore } from '$lib/services/dataLoader';
+    import type { GlobalFunction, Method } from '$lib/types';
 
-    export let methods: Function[] = [];
+    export let methods: (Method | GlobalFunction)[] = [];
     let methodsFilter = '';
 
     $: filteredMethods = methods.filter(
@@ -15,19 +14,11 @@
     function clearMethodsFilter() {
         methodsFilter = '';
     }
-
-    function getParamsForFunction(funcId: number): FunctionParam[] {
-        return dataStore.getParamsForFunction(funcId);
-    }
 </script>
 
 <h2 class="mb-4 text-xl font-semibold text-gray-100">Methods</h2>
 
-<FilterInput
-    value={methodsFilter}
-    placeholder="Filter methods..."
-    onClear={clearMethodsFilter}
-/>
+<FilterInput value={methodsFilter} placeholder="Filter methods..." onClear={clearMethodsFilter} />
 
 {#if filteredMethods.length > 0}
     <div class="space-y-6">
@@ -42,10 +33,10 @@
 
                 <!-- Parameters Section -->
                 <div class="mt-2">
-                    {#if getParamsForFunction(method.id).length > 0}
+                    {#if method.params?.length > 0}
                         <h4 class="mb-1 font-medium text-gray-300">Parameters:</h4>
                         <PropertyTable
-                            items={getParamsForFunction(method.id)}
+                            items={method.params}
                             emptyMessage="No parameters"
                             headerClass="bg-[#111422] text-gray-300 text-sm"
                             rowClass="hover:bg-[#15192b] transition-colors duration-100"
@@ -62,4 +53,4 @@
     <p class="text-gray-400">
         {methods.length > 0 ? 'No methods match the filter' : 'No methods found'}
     </p>
-{/if} 
+{/if}

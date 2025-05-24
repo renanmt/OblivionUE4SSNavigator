@@ -1,6 +1,9 @@
 <script lang="ts">
-    import { dataStore, type Entity, type Property, type Function } from '$lib/services/dataLoader';
+    import { dataStore } from '$lib/services/dataLoader';
+    import type { Entity, Property, Method } from '$lib/types';
     import { onMount } from 'svelte';
+    import { EntityType } from '$lib/types';
+    import type { Class, Enum, Alias, GlobalFunction, TypeMin, Parameter } from '$lib/types';
     import EntityHeader from './entity/EntityHeader.svelte';
     import EntityInfo from './entity/EntityInfo.svelte';
     import TabNavigation from './entity/TabNavigation.svelte';
@@ -9,6 +12,9 @@
     import ChildsTab from './entity/ChildsTab.svelte';
     import ReferencesTab from './entity/ReferencesTab.svelte';
     import CodeTab from './entity/CodeTab.svelte';
+    import EnumValuesTab from './entity/EnumValuesTab.svelte';
+    import AliasValuesTab from './entity/AliasValuesTab.svelte';
+    import GlobalFunctionTab from './entity/GlobalFunctionTab.svelte';
     import type { TabType } from './entity/TabNavigation.svelte';
 
     export let entityId: string;
@@ -18,13 +24,14 @@
 
     let entity: Entity | undefined;
     let properties: Property[] = [];
-    let methods: Function[] = [];
+    let methods: Method[] = [];
+    let enumValues: Enum['values'] = [];
+    let aliasValues: Alias['values'] = [];
+    let functionParams: Parameter[] = [];
+    let functionReturn: TypeMin = { type: '', typeRefs: null };
     let referencedBy: { entity: Entity; referenceType: string }[] = [];
     let isLoading = true;
     let entityCode: string = '';
-
-    // Cache for entity names to avoid multiple lookups
-    let entityNameCache = new Map<number, string>();
 
     // Tab management
     let activeTab: TabType = 'properties';
@@ -85,12 +92,35 @@
             if (entity) {
                 const entityId = entity.id; // Store id to avoid TypeScript errors
 
-                // Get properties, methods, and references directly
-                properties = database.properties.filter((p) => p.parent === entityId);
-                methods = database.methods.filter((m) => m.parent === entityId);
+                // Reset all data
+                properties = [];
+                methods = [];
+                enumValues = [];
+                aliasValues = [];
+                functionParams = [];
+                functionReturn = { type: '', typeRefs: null };
+                referencedBy = [];
+
+                // Load data based on entity type
+                if (entity.type === EntityType.Class) {
+                    properties = (entity as Class).properties;
+                    methods = (entity as Class).methods;
+                    activeTab = 'properties';
+                } else if (entity.type === EntityType.Enum) {
+                    enumValues = (entity as Enum).values;
+                    activeTab = 'values';
+                } else if (entity.type === EntityType.Alias) {
+                    console.log(entity);
+                    aliasValues = (entity as Alias).values;
+                    activeTab = 'values';
+                } else if (entity.type === EntityType.GlobalFunction) {
+                    const globalFunc = entity as GlobalFunction;
+                    functionParams = globalFunc.params;
+                    functionReturn = globalFunc.return;
+                    activeTab = 'function';
+                }
 
                 // Find referencing entities
-                referencedBy = [];
                 for (const refEntity of database.entities) {
                     if (refEntity.references && refEntity.references.some((ref) => ref.id === entityId)) {
                         const reference = refEntity.references.find((ref) => ref.id === entityId);
@@ -105,12 +135,13 @@
 
                 // Get entity source code
                 entityCode = getEntitySourceCode(entity);
-
-                // Cache the names of all related entities
-                cacheEntityNames();
             } else {
                 properties = [];
                 methods = [];
+                enumValues = [];
+                aliasValues = [];
+                functionParams = [];
+                functionReturn = { type: '', typeRefs: null };
                 referencedBy = [];
                 entityCode = '// Entity not found';
             }
@@ -119,47 +150,14 @@
             entity = undefined;
             properties = [];
             methods = [];
+            enumValues = [];
+            aliasValues = [];
+            functionParams = [];
+            functionReturn = { type: '', typeRefs: null };
             referencedBy = [];
             entityCode = `// Error: ${error}`;
         } finally {
             isLoading = false;
-        }
-    }
-
-    // Build cache of entity names for display
-    function cacheEntityNames() {
-        if (!entity) return;
-
-        const { database } = $dataStore;
-        if (!database || !database.entityMap) return;
-
-        const idsToCache = new Set<number>();
-
-        // Add parent if exists
-        if (entity.hasParent && entity.parent !== null) {
-            idsToCache.add(entity.parent);
-        }
-
-        // Add alias if it's a reference to another entity
-        if (entity.aliasFor !== undefined && typeof entity.aliasFor === 'number') {
-            idsToCache.add(entity.aliasFor);
-        }
-
-        // Add all child entities
-        if (entity.childs && entity.childs.length > 0) {
-            for (const id of entity.childs) idsToCache.add(id);
-        }
-
-        // Add all referenced entities
-        if (entity.references && entity.references.length > 0) {
-            for (const ref of entity.references) idsToCache.add(ref.id);
-        }
-
-        // Add all entity names at once from the database
-        for (const id of idsToCache) {
-            const relatedEntity = database.entityMap.get(id);
-            if (relatedEntity) entityNameCache.set(id, relatedEntity.name);
-            else entityNameCache.set(id, `Entity ${id}`);
         }
     }
 
@@ -192,8 +190,8 @@
         <div class="flex">
             <!-- Left Sidebar - Entity Info and Navigation -->
             <div class="w-60 pr-6">
-                <EntityInfo {entity} {properties} {entityNameCache} />
-                <TabNavigation {activeTab} onTabChange={(tab) => (activeTab = tab)} />
+                <EntityInfo {entity} {properties} />
+                <TabNavigation {activeTab} {entity} onTabChange={(tab) => (activeTab = tab)} />
             </div>
 
             <!-- Main Content Area -->
@@ -202,12 +200,20 @@
                     <PropertiesTab {properties} />
                 {:else if activeTab === 'methods'}
                     <MethodsTab {methods} />
+                {:else if activeTab === 'values'}
+                    {#if entity.type === EntityType.Enum}
+                        <EnumValuesTab values={enumValues} />
+                    {:else if entity.type === EntityType.Alias}
+                        <AliasValuesTab values={aliasValues} />
+                    {/if}
                 {:else if activeTab === 'childs'}
-                    <ChildsTab {entity} {entityNameCache} />
+                    <ChildsTab {entity} />
                 {:else if activeTab === 'references'}
-                    <ReferencesTab {entity} {entityNameCache} {referencedBy} />
+                    <ReferencesTab {entity} {referencedBy} />
                 {:else if activeTab === 'code'}
                     <CodeTab {entity} {entityCode} />
+                {:else if activeTab === 'function'}
+                    <GlobalFunctionTab params={functionParams} returnType={functionReturn} />
                 {/if}
             </div>
         </div>

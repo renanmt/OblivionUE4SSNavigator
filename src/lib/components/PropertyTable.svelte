@@ -3,7 +3,6 @@
 
     // Generic type T to allow this component to work with different data types
     export let items: any[] = [];
-    export let columns: { key: string; header: string }[] = [];
 
     // Optional customizations
     export let emptyMessage: string = 'No items found';
@@ -18,19 +17,22 @@
     <p class="py-3 text-gray-400">{emptyMessage}</p>
 {:else}
     <div class="overflow-x-auto">
-        <table class="w-full border-collapse">
+        <table class="w-full border-collapse table-fixed">
+            <colgroup>
+                <col class="w-1/2">
+                <col class="w-1/2">
+            </colgroup>
             <thead class={headerClass}>
                 <tr>
-                    {#each columns as column}
-                        <th class="{cellClass} text-left font-medium">{column.header}</th>
-                    {/each}
+                    <th class="{cellClass} text-left font-medium">Name</th>
+                    <th class="{cellClass} text-left font-medium">Type</th>
                 </tr>
             </thead>
             <tbody>
                 {#each items as item}
                     <tr class="{rowClass} border-b border-[#15192b]">
-                        <td class={cellClass}>{item.name}</td>
-                        <td class={cellClass}><TypeRef typeInfo={item} /></td>
+                        <td class="{cellClass} truncate">{item.name}</td>
+                        <td class="{cellClass} truncate"><TypeRef typeInfo={item} /></td>
                     </tr>
                 {/each}
             </tbody>

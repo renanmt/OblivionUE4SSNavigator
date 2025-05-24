@@ -1,6 +1,5 @@
 <script lang="ts">
-    import { EntityType } from '$lib/types';
-    import type { Entity } from '$lib/services/dataLoader';
+    import { EntityType, type Entity } from '$lib/types';
 
     export let entity: Entity;
 </script>
@@ -76,4 +75,4 @@
         </span>
     {/if}
     {entity?.name || 'Unknown Entity'}
-</h1> 
+</h1>

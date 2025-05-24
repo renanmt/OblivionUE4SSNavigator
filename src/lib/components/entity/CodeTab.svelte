@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { Entity } from '$lib/services/dataLoader';
+    import type { Entity } from '$lib/types';
     import FilterInput from '../common/FilterInput.svelte';
     import hljs from 'highlight.js/lib/core';
     import lua from 'highlight.js/lib/languages/lua';
@@ -10,28 +10,33 @@
     export let entityCode: string = '';
     let codeFilter = '';
     let highlightedCode: string = '';
-
-    // Apply code filter and syntax highlighting
-    $: {
-        if (codeFilter) {
-            const filteredLines = entityCode
-                .split('\n')
-                .filter((line) => line.toLowerCase().includes(codeFilter.toLowerCase()));
-            const filteredText = filteredLines.join('\n');
-            highlightedCode = highlightLuaCode(filteredText);
-        } else {
-            highlightedCode = highlightLuaCode(entityCode);
-        }
-    }
+    let isLuaRegistered = false;
 
     // Function to highlight Lua code using highlight.js
     function highlightLuaCode(code: string): string {
-        if (!code) return '';
+        if (!code || !isLuaRegistered) return code;
         try {
             return hljs.highlight(code, { language: 'lua' }).value;
         } catch (e) {
             console.error('Error highlighting code:', e);
             return code;
+        }
+    }
+
+    // Apply code filter and syntax highlighting
+    $: {
+        if (isLuaRegistered) {
+            if (codeFilter) {
+                const filteredLines = entityCode
+                    .split('\n')
+                    .filter((line) => line.toLowerCase().includes(codeFilter.toLowerCase()));
+                const filteredText = filteredLines.join('\n');
+                highlightedCode = highlightLuaCode(filteredText);
+            } else {
+                highlightedCode = highlightLuaCode(entityCode);
+            }
+        } else {
+            highlightedCode = entityCode;
         }
     }
 
@@ -42,6 +47,17 @@
     onMount(() => {
         // Register Lua language
         hljs.registerLanguage('lua', lua);
+        isLuaRegistered = true;
+        // Initial highlight
+        if (codeFilter) {
+            const filteredLines = entityCode
+                .split('\n')
+                .filter((line) => line.toLowerCase().includes(codeFilter.toLowerCase()));
+            const filteredText = filteredLines.join('\n');
+            highlightedCode = highlightLuaCode(filteredText);
+        } else {
+            highlightedCode = highlightLuaCode(entityCode);
+        }
     });
 </script>
 

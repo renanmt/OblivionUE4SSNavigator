@@ -1,3 +1,13 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+/* Standard link styles */
+.link {
+    @apply text-[#3d249b] hover:text-[#4e31c0] hover:underline;
+}
+
+/* Link styles for dark backgrounds */
+.link-dark {
+    @apply text-[#3d249b] hover:text-[#4e31c0] hover:underline;
+} 

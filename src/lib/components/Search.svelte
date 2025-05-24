@@ -1,6 +1,7 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
-    import { dataStore, type Entity, type Property, type Function, type FunctionParam } from '$lib/services/dataLoader';
+    import type { Entity, Property, Method, Parameter } from '$lib/types';
+    import { dataStore } from '$lib/services/dataLoader';
 
     const dispatch = createEventDispatcher<{
         search: {
@@ -20,8 +21,8 @@
     type SearchResults = {
         entities: Entity[];
         properties: Property[];
-        functions: Function[];
-        params: FunctionParam[];
+        functions: Method[];
+        params: Parameter[];
         totalResults: number;
     };
 
@@ -58,8 +59,8 @@
         searchResults = {
             entities: results.entities,
             properties: results.properties,
-            functions: results.methods as unknown as Function[],
-            params: results.parameters as unknown as FunctionParam[],
+            functions: results.methods as unknown as Method[],
+            params: results.parameters as unknown as Parameter[],
             totalResults:
                 results.entities.length + results.properties.length + results.methods.length + results.parameters.length
         };

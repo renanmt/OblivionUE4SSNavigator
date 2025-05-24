@@ -1,17 +1,18 @@
 <script lang="ts">
-    import type { Entity } from '$lib/services/dataLoader';
+    import { dataStore } from '$lib/services/dataLoader';
     import FilterInput from '../common/FilterInput.svelte';
+    import type { Entity } from '$lib/types';
 
     export let entity: Entity;
-    export let entityNameCache: Map<number, string>;
     export let referencedBy: { entity: Entity; referenceType: string }[] = [];
     let referencesFilter = '';
 
-    $: filteredReferences = entity?.references?.filter((ref) => {
-        if (referencesFilter === '') return true;
-        const refName = entityNameCache.get(ref.id)?.toLowerCase();
-        return refName && refName.includes(referencesFilter.toLowerCase());
-    }) || [];
+    $: filteredReferences =
+        entity?.references?.filter((ref) => {
+            if (referencesFilter === '') return true;
+            const refName = $dataStore.database.entityMap.get(ref.id)?.name.toLowerCase();
+            return refName && refName.includes(referencesFilter.toLowerCase());
+        }) || [];
 
     $: filteredReferencedBy = referencedBy.filter(
         (ref) => referencesFilter === '' || ref.entity.name.toLowerCase().includes(referencesFilter.toLowerCase())
@@ -43,11 +44,7 @@
 
 <h2 class="mb-4 text-xl font-semibold text-gray-100">References</h2>
 
-<FilterInput
-    value={referencesFilter}
-    placeholder="Filter references..."
-    onClear={clearReferencesFilter}
-/>
+<FilterInput value={referencesFilter} placeholder="Filter references..." onClear={clearReferencesFilter} />
 
 {#if entity?.references && filteredReferences.length > 0}
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -56,7 +53,7 @@
                 href={getEntityLink(ref.id)}
                 class="block rounded border border-[#15192b] bg-[#0f121e] p-3 text-gray-100 transition-colors hover:bg-[#15192b]"
             >
-                {entityNameCache.get(ref.id) || `Entity ${ref.id}`}
+                {$dataStore.database.entityMap.get(ref.id)?.name || `Entity ${ref.id}`}
                 <span class="text-gray-400">({getReferenceTypeLabel(ref.type)})</span>
             </a>
         {/each}
@@ -85,4 +82,4 @@
 
 {#if (!entity?.references || entity.references.length === 0) && referencedBy.length === 0}
     <p class="text-gray-400">No references found</p>
-{/if} 
+{/if}

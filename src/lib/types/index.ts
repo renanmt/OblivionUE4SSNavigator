@@ -13,25 +13,47 @@ export enum EntityReferenceType {
     gfunc = 'gfunc'
 }
 
+export interface EntityReference {
+    id: number;
+    type: EntityReferenceType;
+}
+
 export interface Entity {
     id: number;
     name: string;
     type: EntityType;
-    hasParent: boolean;
-    parent: number | null;
-    refNumber: number;
-    references: Array<{ id: number; type: EntityReferenceType }>;
-    childs: number[];
-    aliasFor?: string | number; // Stores what this alias represents
-
-    properties: Property[];
-    methods: Method[];
-    return?: TypeInfo; // For global function entities
-    params?: Parameter[]; // For global function entities
-
+    references: EntityReference[];
+    childs?: number[];
+    
     file: number;
     lineStart: number;
     lineEnd: number;
+}
+
+export interface Class extends Entity {
+    parent: number | null;
+    hasParent: boolean;
+    properties: Property[];
+    methods: Method[];
+}
+
+export interface EnumValue {
+    name: string;
+    value: string;
+}
+
+export interface Enum extends Entity {
+    values: EnumValue[];
+}
+
+export interface Alias extends Entity {
+    values: string[];
+}
+
+export interface GlobalFunction extends Entity {
+    return: TypeMin;
+    params: Parameter[];
+    signature: string;
 }
 
 // Common interface for type information
