@@ -15,6 +15,7 @@
     import EnumValuesTab from './entity/EnumValuesTab.svelte';
     import AliasValuesTab from './entity/AliasValuesTab.svelte';
     import GlobalFunctionTab from './entity/GlobalFunctionTab.svelte';
+    import DescriptionTab from './entity/DescriptionTab.svelte';
     import type { TabType } from './entity/TabNavigation.svelte';
 
     export let entityId: string;
@@ -34,7 +35,7 @@
     let entityCode: string = '';
 
     // Tab management
-    let activeTab: TabType = 'properties';
+    let activeTab: TabType = 'description';
 
     // Wait until the database is loaded
     async function waitForDatabase() {
@@ -105,19 +106,15 @@
                 if (entity.type === EntityType.Class) {
                     properties = (entity as Class).properties;
                     methods = (entity as Class).methods;
-                    activeTab = 'properties';
                 } else if (entity.type === EntityType.Enum) {
                     enumValues = (entity as Enum).values;
-                    activeTab = 'values';
                 } else if (entity.type === EntityType.Alias) {
                     console.log(entity);
                     aliasValues = (entity as Alias).values;
-                    activeTab = 'values';
                 } else if (entity.type === EntityType.GlobalFunction) {
                     const globalFunc = entity as GlobalFunction;
                     functionParams = globalFunc.params;
                     functionReturn = globalFunc.return;
-                    activeTab = 'function';
                 }
 
                 // Find referencing entities
@@ -170,6 +167,7 @@
 
     // Watch for entityId changes and update data
     $: if (numericId) {
+        activeTab = 'description'; // Reset to description tab
         loadEntityData(numericId);
     }
 </script>
@@ -196,7 +194,9 @@
 
             <!-- Main Content Area -->
             <div class="flex-1 rounded-lg border-l border-[#15192b] bg-[#0f121e] p-4 pl-6">
-                {#if activeTab === 'properties'}
+                {#if activeTab === 'description'}
+                    <DescriptionTab {entity} />
+                {:else if activeTab === 'properties'}
                     <PropertiesTab {properties} />
                 {:else if activeTab === 'methods'}
                     <MethodsTab {methods} />

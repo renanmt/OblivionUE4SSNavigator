@@ -11,3 +11,11 @@
         @apply text-[#3d249b] hover:text-[#4e31c0] hover:underline;
     }
 } 
+
+.action-button {
+    @apply rounded px-4 py-1 text-white;
+    background-color: #251857;
+    &:hover {
+        background-color: #3d249b;
+    }
+}
