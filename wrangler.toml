@@ -73,8 +73,13 @@ port = 5173
 ######## PREVIEW environment config ########
 
 [env.preview.vars]
-
+VITE_DISCORD_CLIENT_ID=1381760488098234399
+VITE_DISCORD_CLIENT_SECRET="ISSBj7ItS8Va_ipeXgRl-w3Pbp8CX0Nt"
+VITE_DISCORD_REDIRECT_URI="http://localhost:5173/api/auth/callback"
 
 ######## PRODUCTION environment config ########
 
 [env.production.vars]
+VITE_DISCORD_CLIENT_ID=1381760488098234399
+VITE_DISCORD_CLIENT_SECRET="ISSBj7ItS8Va_ipeXgRl-w3Pbp8CX0Nt"
+VITE_DISCORD_REDIRECT_URI="http://localhost:5173/api/auth/callback"
