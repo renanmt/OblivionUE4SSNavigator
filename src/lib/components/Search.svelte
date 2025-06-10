@@ -8,12 +8,23 @@
             query: string;
             filters: string[];
             results: SearchResults;
+            isRegex: boolean;
         };
     }>();
 
     let searchQuery = '';
-    let filters = ['classes', 'enums', 'aliases', 'global_functions'];
+    let filters = [
+        'classes',
+        'enums',
+        'aliases',
+        'global_functions',
+        'methods',
+        'properties',
+        'parameters'
+    ].sort();
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let isRegexError = false;
+    let regexErrorMessage = '';
 
     export let autoSearch = false;
     export let debounceMs = 500;
@@ -34,7 +45,37 @@
         totalResults: 0
     };
 
+    // Filter button configuration for consistent order
+    const filterButtons = [
+        { id: 'classes', label: 'Classes' },
+        { id: 'enums', label: 'Enums' },
+        { id: 'aliases', label: 'Aliases' },
+        { id: 'global_functions', label: 'Global Functions' },
+        { id: 'methods', label: 'Methods' },
+        { id: 'properties', label: 'Properties' },
+        { id: 'parameters', label: 'Parameters' }
+    ].sort((a, b) => a.label.localeCompare(b.label));
+
+    function isRegexPattern(query: string): boolean {
+        return query.startsWith('/') && query.length > 1 && query.endsWith('/');
+    }
+
+    function getRegexFromPattern(pattern: string): RegExp | null {
+        // Remove leading and trailing slashes
+        const regexStr = pattern.slice(1, -1);
+        try {
+            return new RegExp(regexStr);
+        } catch (error) {
+            isRegexError = true;
+            regexErrorMessage = error instanceof Error ? error.message : 'Invalid regex pattern';
+            return null;
+        }
+    }
+
     function performSearch() {
+        isRegexError = false;
+        regexErrorMessage = '';
+
         if (!searchQuery.trim()) {
             searchResults = {
                 entities: [],
@@ -43,19 +84,40 @@
                 params: [],
                 totalResults: 0
             };
-            dispatch('search', { query: '', filters, results: searchResults });
+            dispatch('search', { query: '', filters, results: searchResults, isRegex: false });
             return;
         }
 
+        const isRegex = isRegexPattern(searchQuery);
+        let finalQuery = searchQuery;
+        let regex: RegExp | null = null;
+
+        if (isRegex) {
+            regex = getRegexFromPattern(searchQuery);
+            if (!regex) {
+                searchResults = {
+                    entities: [],
+                    properties: [],
+                    functions: [],
+                    params: [],
+                    totalResults: 0
+                };
+                dispatch('search', { query: searchQuery, filters, results: searchResults, isRegex });
+                return;
+            }
+            finalQuery = regex.source;
+        }
+
         // Map filters to search options
-        const results = dataStore.search(searchQuery, {
+        const results = dataStore.search(finalQuery, {
             includeClasses: filters.includes('classes'),
             includeEnums: filters.includes('enums'),
             includeAliases: filters.includes('aliases'),
             includeGlobalFunctions: filters.includes('global_functions'),
             includeProperties: filters.includes('properties'),
             includeMethods: filters.includes('methods'),
-            includeParameters: filters.includes('parameters')
+            includeParameters: filters.includes('parameters'),
+            isRegex
         });
 
         // Map results to UI structure
@@ -68,7 +130,7 @@
                 results.entities.length + results.properties.length + results.methods.length + results.parameters.length
         };
 
-        dispatch('search', { query: searchQuery, filters, results: searchResults });
+        dispatch('search', { query: searchQuery, filters, results: searchResults, isRegex });
     }
 
     function debouncedSearch() {
@@ -104,6 +166,8 @@
 
     function clearSearch() {
         searchQuery = '';
+        isRegexError = false;
+        regexErrorMessage = '';
         if (debounceTimer) {
             clearTimeout(debounceTimer);
             debounceTimer = null;
@@ -115,7 +179,7 @@
             params: [],
             totalResults: 0
         };
-        dispatch('search', { query: '', filters, results: searchResults });
+        dispatch('search', { query: '', filters, results: searchResults, isRegex: false });
     }
 
     $: {
@@ -129,8 +193,8 @@
     <div class="relative">
         <input
             type="text"
-            class="w-full rounded-lg border border-[#15192b] bg-[#15192b] p-3 pr-12 pl-10 text-gray-100 placeholder-gray-500 shadow-sm focus:border-[#3a4577] focus:ring-2 focus:ring-[#3a4577] focus:outline-none"
-            placeholder="Search for anything..."
+            class="w-full rounded-lg border {isRegexError ? 'border-red-500' : 'border-[#15192b]'} bg-[#15192b] p-3 pr-12 pl-10 text-gray-100 placeholder-gray-500 shadow-sm focus:border-[#3a4577] focus:ring-2 focus:ring-[#3a4577] focus:outline-none"
+            placeholder="Search for anything... (Use /pattern/ for regex)"
             bind:value={searchQuery}
             on:keydown={handleKeydown}
         />
@@ -169,63 +233,23 @@
         {/if}
     </div>
 
+    {#if isRegexError}
+        <div class="mt-2 text-sm text-red-500">
+            {regexErrorMessage}
+        </div>
+    {/if}
+
     <div class="mt-3 mb-4 flex flex-wrap gap-2">
-        <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('classes')
-                ? 'bg-[#3a4577] text-white'
-                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('classes')}
-        >
-            Classes
-        </button>
-        <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('enums')
-                ? 'bg-[#3a4577] text-white'
-                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('enums')}
-        >
-            Enums
-        </button>
-        <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('aliases')
-                ? 'bg-[#3a4577] text-white'
-                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('aliases')}
-        >
-            Aliases
-        </button>
-        <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('global_functions')
-                ? 'bg-[#3a4577] text-white'
-                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('global_functions')}
-        >
-            Global Functions
-        </button>
-        <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('methods')
-                ? 'bg-[#3a4577] text-white'
-                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('methods')}
-        >
-            Methods
-        </button>
-        <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('properties')
-                ? 'bg-[#3a4577] text-white'
-                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('properties')}
-        >
-            Properties
-        </button>
-        <button
-            class="rounded-full px-3 py-1 text-sm {filters.includes('parameters')
-                ? 'bg-[#3a4577] text-white'
-                : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
-            on:click={() => toggleFilter('parameters')}
-        >
-            Parameters
-        </button>
+        {#each filterButtons as button}
+            <button
+                class="rounded-full px-3 py-1 text-sm {filters.includes(button.id)
+                    ? 'bg-[#3a4577] text-white'
+                    : 'border border-[#15192b] bg-[#111422] text-gray-300'}"
+                on:click={() => toggleFilter(button.id)}
+            >
+                {button.label}
+            </button>
+        {/each}
     </div>
 
     {#if !autoSearch}

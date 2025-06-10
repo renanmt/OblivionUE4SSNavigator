@@ -105,6 +105,7 @@ function createInternalStore() {
                 includeProperties?: boolean;
                 includeMethods?: boolean;
                 includeParameters?: boolean;
+                isRegex?: boolean;
             } = {
                 includeClasses: true,
                 includeEnums: true,
@@ -112,7 +113,8 @@ function createInternalStore() {
                 includeGlobalFunctions: true,
                 includeProperties: false,
                 includeMethods: false,
-                includeParameters: false
+                includeParameters: false,
+                isRegex: false
             }
         ) => {
             const { database, loading } = get();
@@ -124,7 +126,25 @@ function createInternalStore() {
                     parameters: []
                 };
 
-            const lowerQuery = query.toLowerCase();
+            let matcher: (str: string) => boolean;
+            if (filters.isRegex) {
+                try {
+                    const regex = new RegExp(query);
+                    matcher = (str: string) => regex.test(str);
+                } catch (error) {
+                    console.error('Invalid regex pattern:', error);
+                    return {
+                        entities: [],
+                        properties: [],
+                        methods: [],
+                        parameters: []
+                    };
+                }
+            } else {
+                const lowerQuery = query.toLowerCase();
+                matcher = (str: string) => str.toLowerCase().includes(lowerQuery);
+            }
+
             const results = {
                 entities: [] as Entity[],
                 properties: [] as Property[],
@@ -135,35 +155,40 @@ function createInternalStore() {
             // Search through entities based on their specific types
             if (filters.includeClasses) {
                 results.entities.push(
-                    ...database.classes.filter((entity) => entity.name.toLowerCase().includes(lowerQuery))
+                    ...database.classes.filter((entity) => matcher(entity.name))
                 );
             }
             if (filters.includeEnums) {
                 results.entities.push(
-                    ...database.enums.filter((entity) => entity.name.toLowerCase().includes(lowerQuery))
+                    ...database.enums.filter((entity) => matcher(entity.name))
                 );
             }
             if (filters.includeAliases) {
                 results.entities.push(
-                    ...database.aliases.filter((entity) => entity.name.toLowerCase().includes(lowerQuery))
+                    ...database.aliases.filter((entity) => matcher(entity.name))
                 );
             }
             if (filters.includeGlobalFunctions) {
                 results.entities.push(
-                    ...database.globalFunctions.filter((entity) => entity.name.toLowerCase().includes(lowerQuery))
+                    ...database.globalFunctions.filter((entity) => matcher(entity.name))
                 );
             }
 
+            // Sort entities by name
+            results.entities.sort((a, b) => a.name.localeCompare(b.name));
+
             // Search through properties if included in filters
             if (filters.includeProperties) {
-                results.properties = database.properties.filter((property) =>
-                    property.name.toLowerCase().includes(lowerQuery)
-                );
+                results.properties = database.properties
+                    .filter((property) => matcher(property.name))
+                    .sort((a, b) => a.name.localeCompare(b.name));
             }
 
             // Search through methods if included in filters
             if (filters.includeMethods) {
-                results.methods = database.methods.filter((method) => method.name.toLowerCase().includes(lowerQuery));
+                results.methods = database.methods
+                    .filter((method) => matcher(method.name))
+                    .sort((a, b) => a.name.localeCompare(b.name));
             }
 
             // Search through parameters if included in filters
@@ -173,7 +198,7 @@ function createInternalStore() {
                 // Check method parameters
                 for (const method of database.methods) {
                     const matchingParams = method.params.filter((param) =>
-                        param.name.toLowerCase().includes(lowerQuery)
+                        matcher(param.name)
                     );
                     paramResults.push(...matchingParams);
                 }
@@ -182,13 +207,14 @@ function createInternalStore() {
                 for (const func of database.globalFunctions) {
                     if (func.params) {
                         const matchingParams = func.params.filter((param) =>
-                            param.name.toLowerCase().includes(lowerQuery)
+                            matcher(param.name)
                         );
                         paramResults.push(...matchingParams);
                     }
                 }
 
-                results.parameters = paramResults;
+                // Sort parameters by name
+                results.parameters = paramResults.sort((a, b) => a.name.localeCompare(b.name));
             }
 
             return results;

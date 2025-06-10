@@ -8,7 +8,7 @@
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div class="flex h-16 items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <img src="oblivion-icon.webp" alt="Oblivion Icon" class="h-8 w-8 rounded-full" />
+                    <img src="/favicon.png" alt="Oblivion Icon" class="h-14 w-14 rounded-full" />
                     <a href="/" class="text-xl font-bold text-gray-100">Oblivion UE4SS Navigator</a>
                 </div>
                 <div class="flex items-center space-x-4">
