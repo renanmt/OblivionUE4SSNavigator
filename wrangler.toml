@@ -74,7 +74,6 @@ port = 5173
 
 [env.preview.vars]
 VITE_DISCORD_CLIENT_ID = "1381760488098234399"
-VITE_DISCORD_CLIENT_SECRET = "ISSBj7ItS8Va_ipeXgRl-w3Pbp8CX0Nt"
 VITE_DISCORD_REDIRECT_URI = "https://navigator.oblivion.wiki/api/auth/callback"
 VITE_SUPABASE_URL = "https://lydntrnvdhjmonpfemsu.supabase.co"
 VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5ZG50cm52ZGhqbW9ucGZlbXN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1MDc4MDIsImV4cCI6MjA2NTA4MzgwMn0.c59aIu6B8gEhSf-CtfjPuw16wNw2-F9Z_JEKsudwE10"
@@ -83,7 +82,6 @@ VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhY
 
 [env.production.vars]
 VITE_DISCORD_CLIENT_ID = "1381760488098234399"
-VITE_DISCORD_CLIENT_SECRET = "ISSBj7ItS8Va_ipeXgRl-w3Pbp8CX0Nt"
 VITE_DISCORD_REDIRECT_URI = "https://navigator.oblivion.wiki/api/auth/callback"
 VITE_SUPABASE_URL = "https://lydntrnvdhjmonpfemsu.supabase.co"
 VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5ZG50cm52ZGhqbW9ucGZlbXN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1MDc4MDIsImV4cCI6MjA2NTA4MzgwMn0.c59aIu6B8gEhSf-CtfjPuw16wNw2-F9Z_JEKsudwE10"

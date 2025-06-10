@@ -1,5 +1,5 @@
-import { json, redirect } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
+import { DISCORD_CLIENT_SECRET } from '$env/static/private';
 
 export const GET = async ({ url, cookies }: RequestEvent) => {
     const code = url.searchParams.get('code');
@@ -17,7 +17,7 @@ export const GET = async ({ url, cookies }: RequestEvent) => {
             method: 'POST',
             body: new URLSearchParams({
                 client_id: import.meta.env.VITE_DISCORD_CLIENT_ID,
-                client_secret: import.meta.env.VITE_DISCORD_CLIENT_SECRET,
+                client_secret: DISCORD_CLIENT_SECRET,
                 code,
                 grant_type: 'authorization_code',
                 redirect_uri: import.meta.env.VITE_DISCORD_REDIRECT_URI
