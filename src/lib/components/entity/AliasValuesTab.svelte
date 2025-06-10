@@ -16,7 +16,7 @@
 <h2 class="mb-4 text-xl font-semibold text-gray-100">Values</h2>
 
 <FilterInput
-    value={valuesFilter}
+    bind:value={valuesFilter}
     placeholder="Filter alias values..."
     onClear={clearValuesFilter}
 />

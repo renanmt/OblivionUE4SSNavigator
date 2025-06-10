@@ -18,7 +18,7 @@
 
 <h2 class="mb-4 text-xl font-semibold text-gray-100">Methods</h2>
 
-<FilterInput value={methodsFilter} placeholder="Filter methods..." onClear={clearMethodsFilter} />
+<FilterInput bind:value={methodsFilter} placeholder="Filter methods..." onClear={clearMethodsFilter} />
 
 {#if filteredMethods.length > 0}
     <div class="space-y-6">

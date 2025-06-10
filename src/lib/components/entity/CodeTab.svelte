@@ -63,7 +63,7 @@
 
 <h2 class="mb-4 text-xl font-semibold text-gray-100">Code</h2>
 
-<FilterInput value={codeFilter} placeholder="Filter code..." onClear={clearCodeFilter} />
+<FilterInput bind:value={codeFilter} placeholder="Filter code..." onClear={clearCodeFilter} />
 
 <div class="overflow-x-auto rounded border border-[#15192b] bg-[#080a11] p-4 text-gray-200">
     {#if entity?.file !== undefined}

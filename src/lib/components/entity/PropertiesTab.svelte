@@ -5,7 +5,7 @@
 
     export let properties: Property[] = [];
     let propertiesFilter = '';
-
+    
     $: filteredProperties = properties.filter(
         (p) => propertiesFilter === '' || p.name.toLowerCase().includes(propertiesFilter.toLowerCase())
     );
@@ -13,11 +13,16 @@
     function clearPropertiesFilter() {
         propertiesFilter = '';
     }
+
 </script>
 
 <h2 class="mb-4 text-xl font-semibold text-gray-100">Properties</h2>
 
-<FilterInput value={propertiesFilter} placeholder="Filter properties..." onClear={clearPropertiesFilter} />
+<FilterInput 
+    bind:value={propertiesFilter} 
+    placeholder="Filter properties..." 
+    onClear={clearPropertiesFilter}
+/>
 
 {#if filteredProperties.length > 0}
     <PropertyTable
