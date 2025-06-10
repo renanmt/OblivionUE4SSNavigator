@@ -8,8 +8,8 @@
     <input
         type="text"
         {placeholder}
-        class="w-full rounded border border-[#15192b] bg-[#15192b] p-2 pr-10 text-gray-100 placeholder-gray-500 focus:border-[#3a4577] focus:outline-none"
         bind:value
+        class="w-full rounded border border-[#15192b] bg-[#15192b] p-2 pr-10 text-gray-100 placeholder-gray-500 focus:border-[#3a4577] focus:outline-none"
     />
     {#if value}
         <button

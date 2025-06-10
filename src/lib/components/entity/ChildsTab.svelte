@@ -28,7 +28,7 @@
 <h2 class="mb-4 text-xl font-semibold text-gray-100">Childs</h2>
 
 {#if isClass}
-    <FilterInput value={childsFilter} placeholder="Filter child entities..." onClear={clearChildsFilter} />
+    <FilterInput bind:value={childsFilter} placeholder="Filter child entities..." onClear={clearChildsFilter} />
 
     {#if filteredChilds.length > 0}
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">

@@ -23,9 +23,7 @@
     $: isGlobalFunction = entity.type === EntityType.GlobalFunction;
 
     const commonTabs: { id: TabType; label: string }[] = [
-        { id: 'description', label: 'Description' },
-        { id: 'references', label: 'References' },
-        { id: 'code', label: 'Code' }
+        { id: 'description' as const, label: 'Description' }
     ];
 
     $: tabs = [
@@ -33,14 +31,16 @@
         ...(entity.type === EntityType.Class
             ? [
                   { id: 'properties' as const, label: 'Properties' },
-                  { id: 'methods' as const, label: 'Methods' },
-                  { id: 'childs' as const, label: 'Childs' }
+                  { id: 'methods' as const, label: 'Methods' }
               ]
             : []),
         ...(entity.type === EntityType.Enum || entity.type === EntityType.Alias
             ? [{ id: 'values' as const, label: 'Values' }]
             : []),
-        ...(entity.type === EntityType.GlobalFunction ? [{ id: 'function' as const, label: 'Function' }] : [])
+        ...(entity.type === EntityType.GlobalFunction ? [{ id: 'function' as const, label: 'Function' }] : []),
+        ...(entity.type === EntityType.Class ? [{ id: 'childs' as const, label: 'Childs' }] : []),
+        { id: 'references' as const, label: 'References' },
+        { id: 'code' as const, label: 'Code' }
     ];
 </script>
 

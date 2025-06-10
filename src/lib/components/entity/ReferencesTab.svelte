@@ -44,7 +44,7 @@
 
 <h2 class="mb-4 text-xl font-semibold text-gray-100">References</h2>
 
-<FilterInput value={referencesFilter} placeholder="Filter references..." onClear={clearReferencesFilter} />
+<FilterInput bind:value={referencesFilter} placeholder="Filter references..." onClear={clearReferencesFilter} />
 
 {#if entity?.references && filteredReferences.length > 0}
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">

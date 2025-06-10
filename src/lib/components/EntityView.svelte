@@ -106,15 +106,18 @@
                 if (entity.type === EntityType.Class) {
                     properties = (entity as Class).properties;
                     methods = (entity as Class).methods;
+                    activeTab = 'properties';
                 } else if (entity.type === EntityType.Enum) {
                     enumValues = (entity as Enum).values;
+                    activeTab = 'values';
                 } else if (entity.type === EntityType.Alias) {
-                    console.log(entity);
                     aliasValues = (entity as Alias).values;
+                    activeTab = 'values';
                 } else if (entity.type === EntityType.GlobalFunction) {
                     const globalFunc = entity as GlobalFunction;
                     functionParams = globalFunc.params;
                     functionReturn = globalFunc.return;
+                    activeTab = 'function';
                 }
 
                 // Find referencing entities
@@ -167,7 +170,6 @@
 
     // Watch for entityId changes and update data
     $: if (numericId) {
-        activeTab = 'description'; // Reset to description tab
         loadEntityData(numericId);
     }
 </script>
@@ -210,10 +212,10 @@
                     <ChildsTab {entity} />
                 {:else if activeTab === 'references'}
                     <ReferencesTab {entity} {referencedBy} />
-                {:else if activeTab === 'code'}
-                    <CodeTab {entity} {entityCode} />
                 {:else if activeTab === 'function'}
                     <GlobalFunctionTab params={functionParams} returnType={functionReturn} />
+                {:else if activeTab === 'code'}
+                    <CodeTab {entity} {entityCode} />
                 {/if}
             </div>
         </div>
